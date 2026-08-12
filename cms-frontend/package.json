@@ -9,10 +9,12 @@
   "scripts": {
     "dev": "vite --mode development --host 0.0.0.0",
     "build": "vite build --mode production",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "vitest run"
   },
   "devDependencies": {
-    "vite": "^8.1.5"
+    "vite": "^8.1.5",
+    "vitest": "^4.1.10"
   },
   "dependencies": {
     "@tiptap/core": "^3.29.2",

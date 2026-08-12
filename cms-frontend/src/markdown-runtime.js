@@ -1,45 +1,19 @@
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
+import {
+  normalizeEscapedImageMarkdown,
+  normalizeImageWidths,
+  normalizeMarkdownStructure,
+} from './markdown-utils.js';
 
 const renderer = new marked.Renderer();
 const IMAGE_WIDTHS = new Set(['25', '33', '50', '66', '75', '100']);
-const LIST_ITEM_PATTERN = /^\s*(?:[-+*]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/;
-const CODE_FENCE_PATTERN = /^\s*(```|~~~)/;
 
 const normalizeUploadUrl = (href) => (
   typeof window.CMSNormalizeMarkdownUrl === 'function'
     ? window.CMSNormalizeMarkdownUrl(href)
     : href
 );
-
-// Compatibility for notes saved by the short-lived pre-Tiptap editor.
-// It escaped image delimiters and URL underscores, preventing Markdown parsing.
-const normalizeEscapedImageMarkdown = (source) => String(source || '').replace(
-  /!\\+\[([\s\S]*?)\\+\]\(([^)\r\n]*)\)/g,
-  (_, alt, target) => {
-    const cleanAlt = String(alt).replace(/\\+([\[\]\\])/g, '$1');
-    const cleanTarget = String(target).replace(/\\+([_()[\]\\])/g, '$1');
-    return `![${cleanAlt}](${cleanTarget})`;
-  },
-);
-
-const normalizeMarkdownStructure = (source) => {
-  const lines = String(source || '').replace(/\r\n?/g, '\n').split('\n');
-  const normalized = [];
-  let inCodeFence = false;
-  let previousWasListItem = false;
-
-  lines.forEach((line) => {
-    if (CODE_FENCE_PATTERN.test(line)) inCodeFence = !inCodeFence;
-    const isListItem = !inCodeFence && LIST_ITEM_PATTERN.test(line);
-    const isPlainTopLevelLine = !inCodeFence && line.trim() && !isListItem && !/^\s/.test(line);
-    if (previousWasListItem && isPlainTopLevelLine) normalized.push('');
-    normalized.push(line);
-    previousWasListItem = isListItem;
-  });
-
-  return normalized.join('\n');
-};
 
 const escapeAttribute = (value) => String(value || '')
   .replace(/&/g, '&amp;')
@@ -76,18 +50,6 @@ renderer.link = function ({ href, title, tokens }) {
 
 marked.use({ async: false, breaks: true, gfm: true, renderer });
 
-const normalizeSizedImages = (source) => String(source || '').replace(
-  /!\[([^\]]*)\]\(([^\s)]+)(?:\s+"[^"]*")?\)\{width=([^}]+)\}/g,
-  (_, alt, href, rawWidth) => {
-    const match = String(rawWidth).trim().match(/^(\d+)(%|px)?$/);
-    const width = match?.[1];
-    const unit = match?.[2] || 'px';
-    return width && (unit === 'px' || IMAGE_WIDTHS.has(width))
-      ? `![${alt}](${href} "veldr-width=${width}${unit}")`
-      : `![${alt}](${href})`;
-  },
-);
-
 const renderGridImages = (body, columns) => {
   const images = [];
   const imagePattern = /!\[([^\]]*)\]\(([^\s)]+)(?:\s+"([^"]*)")?\)\{width=(\d+)(%|px)?\}|!\[([^\]]*)\]\(([^\s)]+)(?:\s+"([^"]*)")?\)/g;
@@ -117,7 +79,7 @@ const extractImageGrids = (source) => {
 };
 
 const render = (source) => {
-  const normalizedSource = normalizeMarkdownStructure(normalizeSizedImages(normalizeEscapedImageMarkdown(source)));
+  const normalizedSource = normalizeMarkdownStructure(normalizeImageWidths(normalizeEscapedImageMarkdown(source)));
   const { markdown, grids } = extractImageGrids(normalizedSource);
   let html = marked.parse(markdown);
   grids.forEach((grid, index) => {

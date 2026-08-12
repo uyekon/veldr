@@ -11,6 +11,8 @@ export const App = {
   editingMenuId: null,
   editingNoteVersion: null,
   autosaveTimer: null,
+  draftSaveTimer: null,
+  draftNotebookId: null,
   autosaveInFlight: false,
   autosaveDirty: false,
   suppressAutosave: false,

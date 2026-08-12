@@ -6,6 +6,7 @@ import { attachAuthState } from '../../middleware/auth.js';
 import { asyncHandler } from '../../middleware/errorHandler.js';
 import { loadDB, persistDB, nextId, normalizeTags, uploadDir } from './cmsStore.js';
 import { requireEditor, requireViewer } from './cmsAuth.js';
+import { cleanupUnreferencedCmsUploads, extractCmsUploadFilenames } from './cmsImages.js';
 
 const router = express.Router();
 
@@ -155,6 +156,7 @@ router.put('/notes/:id', editor, asyncHandler(async (req, res) => {
   }
 
   const content = body.content !== undefined ? String(body.content) : current.content;
+  const previousImages = extractCmsUploadFilenames(current.content);
   const timestamp = nowIso();
   const updated = {
     ...current,
@@ -174,16 +176,20 @@ router.put('/notes/:id', editor, asyncHandler(async (req, res) => {
 
   db.notes[index] = updated;
   await persistDB();
+  await cleanupUnreferencedCmsUploads({ notes: db.notes, candidates: previousImages });
   return send(res, 200, updated);
 }));
 
 router.delete('/notes/:id', editor, asyncHandler(async (req, res) => {
   const db = await loadDB();
   const id = Number(req.params.id);
+  const deletedNote = db.notes.find(note => note.id === id);
+  const previousImages = extractCmsUploadFilenames(deletedNote?.content);
   const before = db.notes.length;
   db.notes = db.notes.filter(note => note.id !== id);
   if (db.notes.length === before) return send(res, 404, { error: 'Note not found' });
   await persistDB();
+  await cleanupUnreferencedCmsUploads({ notes: db.notes, candidates: previousImages });
   return send(res, 200, { ok: true });
 }));
 
@@ -309,5 +315,14 @@ router.post('/upload', editor, (req, res) => {
     });
   });
 });
+
+router.post('/uploads/cleanup', editor, asyncHandler(async (req, res) => {
+  const db = await loadDB();
+  const removed = await cleanupUnreferencedCmsUploads({
+    notes: db.notes,
+    minAgeMs: 24 * 60 * 60 * 1000,
+  });
+  return send(res, 200, { removed, count: removed.length });
+}));
 
 export default router;

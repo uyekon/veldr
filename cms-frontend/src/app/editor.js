@@ -8,15 +8,25 @@ import { TableKit } from '@tiptap/extension-table';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import { apiPath } from '../config.js';
+import {
+  IMAGE_WIDTHS,
+  MAX_GALLERY_COLUMNS,
+  MIN_GALLERY_COLUMNS,
+  normalizeMarkdownForEditor,
+  normalizeMarkdownStructure,
+  normalizeImageWidths,
+} from '../markdown-utils.js';
+import {
+  createDraftRecord,
+  isDraftNewerThanNote,
+  loadDraft,
+  removeDraft,
+  saveDraft,
+} from './drafts.js';
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_IMAGE_LABEL = '20 MB';
 const ALLOWED_IMAGE_TYPES = /^image\/(png|jpe?g|gif|webp|svg\+xml|avif|bmp)$/i;
-const IMAGE_WIDTHS = new Set(['25', '33', '50', '66', '75', '100']);
-const MIN_GALLERY_COLUMNS = 2;
-const MAX_GALLERY_COLUMNS = 4;
-const LIST_ITEM_PATTERN = /^\s*(?:[-+*]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/;
-const CODE_FENCE_PATTERN = /^\s*(```|~~~)/;
 
 function imageAltText(name) {
   return String(name || 'image').replace(/[\[\]\n\r]/g, ' ').trim() || 'image';
@@ -32,24 +42,6 @@ function imageMarkdown(attrs) {
   if (/^\d+$/.test(width)) return `${base}{width=${width}px}`;
   if (IMAGE_WIDTHS.has(widthPercent)) return `${base}{width=${widthPercent}%}`;
   return base;
-}
-
-function normalizeMarkdownStructure(markdown) {
-  const lines = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
-  const normalized = [];
-  let inCodeFence = false;
-  let previousWasListItem = false;
-
-  lines.forEach((line) => {
-    if (CODE_FENCE_PATTERN.test(line)) inCodeFence = !inCodeFence;
-    const isListItem = !inCodeFence && LIST_ITEM_PATTERN.test(line);
-    const isPlainTopLevelLine = !inCodeFence && line.trim() && !isListItem && !/^\s/.test(line);
-    if (previousWasListItem && isPlainTopLevelLine) normalized.push('');
-    normalized.push(line);
-    previousWasListItem = isListItem;
-  });
-
-  return normalized.join('\n');
 }
 
 const VeldrImage = Image.extend({
@@ -113,31 +105,6 @@ const ImageGallery = Node.create({
   },
 });
 
-function normalizeEscapedImageMarkdown(markdown) {
-  return String(markdown || '').replace(
-    /!\\+\[([\s\S]*?)\\+\]\(([^)\r\n]*)\)/g,
-    (_, alt, target) => {
-      const cleanAlt = String(alt).replace(/\\+([\[\]\\])/g, '$1');
-      const cleanTarget = String(target).replace(/\\+([_()[\]\\])/g, '$1');
-      return `![${cleanAlt}](${cleanTarget})`;
-    },
-  );
-}
-
-function normalizeImageWidths(markdown) {
-  return normalizeEscapedImageMarkdown(markdown).replace(
-    /!\[([^\]]*)\]\(([^\s)]+)(?:\s+"[^"]*")?\)\{width=(\d+)(%|px)?\}/g,
-    (_, alt, href, width, unit) => `![${alt}](${href} "veldr-width=${width}${unit || 'px'}")`,
-  );
-}
-
-function promoteIndentedImageBlocks(markdown) {
-  return String(markdown || '').replace(
-    /^[\t ]+(!\[[^\]]*\]\([^\r\n]+\)(?:\{width=\d+(?:%|px)?\})?)\s*$/gm,
-    '\n$1\n',
-  );
-}
-
 function galleryImages(markdown) {
   const images = [];
   const matcher = /!\[([^\]]*)\]\(([^\s)]+)(?:\s+"([^"]*)")?\)(?:\{width=(\d+)(?:%|px)?\})?/g;
@@ -160,7 +127,7 @@ function galleryImages(markdown) {
 
 function parseLegacyMarkdown(editor, markdown) {
   const galleries = [];
-  const source = promoteIndentedImageBlocks(normalizeMarkdownStructure(normalizeImageWidths(markdown))).replace(
+  const source = normalizeMarkdownForEditor(markdown).replace(
     /^:::images\{columns=(2|3|4)\}\s*$([\s\S]*?)^:::\s*$/gm,
     (_, columns, body) => {
       const token = `VELDR_GALLERY_${galleries.length}_TOKEN`;
@@ -194,7 +161,7 @@ function getUploadErrorMessage(response, data, fallback) {
 }
 
 export const editorMethods = {
-  openNoteModal(editId) {
+  async openNoteModal(editId) {
     if (this.role !== 'editor') {
       this.toast('查看模式下不能编辑，请先登录管理员账号');
       return;
@@ -208,18 +175,19 @@ export const editorMethods = {
     const tagsEl = document.getElementById('noteTags');
     const deleteBtn = document.getElementById('modalDeleteBtn');
     let content = '';
+    let existingNote = null;
 
     if (editId) {
-      const note = this._notes.find((item) => item.id === editId);
-      if (!note) return;
+      existingNote = this._notes.find((item) => item.id === editId);
+      if (!existingNote) return;
       document.getElementById('modalTitle').textContent = '编辑笔记';
       document.getElementById('modalSaveBtn').textContent = '更新笔记';
-      titleEl.value = note.title;
-      this.ensureCategoryOptions(note.category);
-      categoryEl.value = note.category;
-      tagsEl.value = (note.tags || []).join(', ');
-      content = note.content || '';
-      this.editingNoteVersion = Number(note.version) || 1;
+      titleEl.value = existingNote.title;
+      this.ensureCategoryOptions(existingNote.category);
+      categoryEl.value = existingNote.category;
+      tagsEl.value = (existingNote.tags || []).join(', ');
+      content = existingNote.content || '';
+      this.editingNoteVersion = Number(existingNote.version) || 1;
       deleteBtn.style.display = '';
     } else {
       document.getElementById('modalTitle').textContent = '新建笔记';
@@ -230,6 +198,7 @@ export const editorMethods = {
       tagsEl.value = '';
       deleteBtn.style.display = 'none';
     }
+    this.draftNotebookId = existingNote?.notebookId ?? this.getCurrentNotebookId();
 
     modal.classList.add('modal-overlay--active');
     this.autosaveDirty = false;
@@ -239,7 +208,8 @@ export const editorMethods = {
     this.setEditorMode('write');
     this.updateMarkdownPreview(true);
     this.suppressAutosave = false;
-    this.setAutosaveStatus(this.editingNoteId ? `服务器版本 v${this.editingNoteVersion || 1}` : '新笔记尚未保存');
+    const restoredDraft = await this.restoreEditorDraft(existingNote);
+    if (!restoredDraft) this.setAutosaveStatus(this.editingNoteId ? `服务器版本 v${this.editingNoteVersion || 1}` : '新笔记尚未保存');
     setTimeout(() => titleEl.focus(), 100);
   },
 
@@ -333,12 +303,69 @@ export const editorMethods = {
     editor.commands.setContent(parseLegacyMarkdown(editor, source), { emitUpdate: false });
   },
 
+  getEditorDraft() {
+    const tagsRaw = document.getElementById('noteTags')?.value.trim() || '';
+    return createDraftRecord({
+      noteId: this.editingNoteId,
+      title: document.getElementById('noteTitle')?.value,
+      category: document.getElementById('noteCategory')?.value,
+      tags: tagsRaw ? tagsRaw.split(',').map((tag) => tag.trim()).filter(Boolean) : [],
+      content: this.getEditorMarkdown(),
+      notebookId: this.draftNotebookId,
+      serverVersion: this.editingNoteVersion,
+      serverUpdatedAt: this._notes.find((note) => note.id === this.editingNoteId)?.updatedAt || null,
+    });
+  },
+
+  scheduleDraftSave() {
+    if (this.role !== 'editor' || this.suppressAutosave) return;
+    clearTimeout(this.draftSaveTimer);
+    this.draftSaveTimer = setTimeout(() => {
+      const draft = this.getEditorDraft();
+      if (!draft.title && !draft.content) return;
+      saveDraft(draft).catch(() => {});
+    }, 500);
+  },
+
+  async clearEditorDraft(noteId = this.editingNoteId) {
+    clearTimeout(this.draftSaveTimer);
+    this.draftSaveTimer = null;
+    await removeDraft(noteId).catch(() => {});
+  },
+
+  async restoreEditorDraft(note) {
+    const draft = await loadDraft(note?.id).catch(() => null);
+    if (!draft || !isDraftNewerThanNote(draft, note)) return false;
+
+    const message = note
+      ? '检测到此笔记有较新的本地草稿。是否恢复草稿？'
+      : '检测到未保存的新笔记草稿。是否恢复？';
+    if (!confirm(message)) {
+      await removeDraft(note?.id).catch(() => {});
+      return false;
+    }
+
+    this.suppressAutosave = true;
+    document.getElementById('noteTitle').value = draft.title;
+    this.ensureCategoryOptions(draft.category || this.getDefaultCategoryId());
+    document.getElementById('noteCategory').value = draft.category || this.getDefaultCategoryId();
+    document.getElementById('noteTags').value = (draft.tags || []).join(', ');
+    this.draftNotebookId = draft.notebookId ?? this.draftNotebookId;
+    this.setEditorMarkdown(draft.content);
+    this.setEditorMode('write');
+    this.suppressAutosave = false;
+    this.autosaveDirty = true;
+    this.setAutosaveStatus('已恢复本地草稿，等待保存');
+    return true;
+  },
+
   async saveNote(options = {}) {
     if (this.role !== 'editor') return;
     const title = document.getElementById('noteTitle').value.trim();
     if (!title) return alert('请输入笔记标题');
     if (!this.getEditorMarkdown().trim()) return alert('请输入笔记内容');
 
+    const draftNoteId = this.editingNoteId;
     const payload = this.getNoteFormPayload();
     if (this.editingNoteId && this.editingNoteVersion) payload.version = this.editingNoteVersion;
     this.showLoading(true);
@@ -357,6 +384,7 @@ export const editorMethods = {
         this.setAutosaveStatus(`已保存 v${this.editingNoteVersion}`);
       }
       this.autosaveDirty = false;
+      await this.clearEditorDraft(draftNoteId);
       await this.reloadNotes();
       this.updateCounts();
       this.renderTags();
@@ -374,6 +402,7 @@ export const editorMethods = {
     this.showLoading(true);
     try {
       await this.api('DELETE', apiPath(`/notes/${this.editingNoteId}`));
+      await this.clearEditorDraft(this.editingNoteId);
       await this.reloadNotes(); this.updateCounts(); this.renderTags();
       this.closeModal({ force: true }); this.showBrowse(); this.toast('笔记已删除');
     } catch (error) { this.toast(error.message); } finally { this.showLoading(false); }
@@ -384,6 +413,7 @@ export const editorMethods = {
     this.showLoading(true);
     try {
       await this.api('DELETE', apiPath(`/notes/${id}`));
+      await this.clearEditorDraft(id);
       await this.reloadNotes(); this.updateCounts(); this.renderTags();
       if (this.currentNote?.id === id) { this.currentNote = null; this.showBrowse(); }
       this.renderNotes(); this.toast('笔记已删除');
@@ -408,10 +438,14 @@ export const editorMethods = {
 
   closeModal(options = {}) {
     if (!options.force && this.role === 'editor' && this.hasUnsavedEditorInput() && !confirm('有未保存的修改，确定要关闭吗？')) return;
+    if (!options.force && this.hasUnsavedEditorInput()) {
+      void saveDraft(this.getEditorDraft()).catch(() => {});
+    }
     document.getElementById('noteModal').classList.remove('modal-overlay--active');
     clearTimeout(this.autosaveTimer);
+    clearTimeout(this.draftSaveTimer);
     this.autosaveTimer = null; this.autosaveDirty = false; this.conflictPending = false;
-    this.editingNoteId = null; this.editingNoteVersion = null;
+    this.editingNoteId = null; this.editingNoteVersion = null; this.draftNotebookId = null;
   },
 
   setEditorMode(mode) {
@@ -466,6 +500,7 @@ export const editorMethods = {
 
   scheduleAutosave() {
     if (this.role !== 'editor') return;
+    this.scheduleDraftSave();
     this.autosaveDirty = true;
     if (!this.editingNoteId || this.conflictPending) return;
     this.setAutosaveStatus('有未保存修改');
@@ -486,6 +521,7 @@ export const editorMethods = {
       const local = this._notes.find((note) => note.id === updated.id);
       if (local) Object.assign(local, updated);
       this.lastKnownNotesVersion = this.getNotesVersionFingerprint();
+      await this.clearEditorDraft(updated.id);
       this.setAutosaveStatus(`已自动保存 ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
     } catch (error) {
       if (error.status === 409 || error.code === 'VERSION_CONFLICT') this.handleVersionConflict(error.current);
@@ -500,7 +536,7 @@ export const editorMethods = {
       category: document.getElementById('noteCategory').value,
       tags: tagsRaw ? tagsRaw.split(',').map((tag) => tag.trim()).filter(Boolean) : [],
       content: this.getEditorMarkdown().trim(),
-      notebookId: this.getCurrentNotebookId(),
+      notebookId: this.draftNotebookId,
     };
   },
 
@@ -517,7 +553,9 @@ export const editorMethods = {
       const payload = this.getNoteFormPayload(); payload.version = this.editingNoteVersion; payload.force = true;
       const updated = await this.api('PUT', apiPath(`/notes/${this.editingNoteId}`), payload);
       this.editingNoteVersion = Number(updated.version) || this.editingNoteVersion;
-      this.autosaveDirty = false; this.conflictPending = false; await this.reloadNotes(); this.toast('已覆盖服务器版本');
+      this.autosaveDirty = false; this.conflictPending = false;
+      await this.clearEditorDraft(updated.id);
+      await this.reloadNotes(); this.toast('已覆盖服务器版本');
     } catch (error) { this.toast(error.message); } finally { this.showLoading(false); }
   },
 
@@ -529,10 +567,12 @@ export const editorMethods = {
     document.getElementById('noteCategory').value = note.category || this.getDefaultCategoryId();
     document.getElementById('noteTags').value = (note.tags || []).join(', ');
     this.setEditorMarkdown(note.content || '');
+    this.draftNotebookId = note.notebookId || null;
     this.editingNoteVersion = Number(note.version) || 1;
     this.autosaveDirty = false; this.conflictPending = false;
     this.suppressAutosave = false;
     clearTimeout(this.autosaveTimer); this.autosaveTimer = null;
+    void this.clearEditorDraft(note.id);
     this.setAutosaveStatus(`服务器版本 v${this.editingNoteVersion}`);
   },
 

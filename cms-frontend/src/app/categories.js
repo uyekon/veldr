@@ -50,7 +50,10 @@ export const categoryMethods = {
       return;
     }
 
-    container.innerHTML = this._categories.map(category => {
+    const visibleCategories = this._categories.filter((category) => (
+      scopedNotes.some((note) => note.category === category.id)
+    ));
+    container.innerHTML = visibleCategories.map(category => {
       const filter = this.getCategoryFilter(category.id);
       const active = this.currentFilter === filter;
       const count = scopedNotes.filter(note => note.category === category.id).length;
@@ -122,7 +125,9 @@ export const categoryMethods = {
     const scopedNotes = this.getScopedNotes();
     const items = [
       { filter: 'all', label: '所有笔记', count: scopedNotes.length },
-      ...this._categories.map(category => ({
+      ...this._categories.filter((category) => (
+        scopedNotes.some((note) => note.category === category.id)
+      )).map(category => ({
         filter: this.getCategoryFilter(category.id),
         label: category.label,
         count: scopedNotes.filter(n => n.category === category.id).length,

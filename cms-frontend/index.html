@@ -310,6 +310,12 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
 .markdown-editor-host{min-width:0;min-height:500px;border:1px solid var(--c200);border-radius:8px;background:#fff;overflow:auto}
 .markdown-editor-host .tiptap{min-height:460px;padding:var(--s5);outline:0;font-family:var(--font-sans);font-size:.98rem;line-height:1.75;color:var(--c800)}
 .markdown-editor-host .tiptap p.is-editor-empty:first-child::before{content:attr(data-placeholder);float:left;height:0;color:var(--c400);pointer-events:none}
+.markdown-editor-host .tiptap ul,.markdown-editor-host .tiptap ol{margin:var(--s4) 0;padding-left:var(--s6)}
+.markdown-editor-host .tiptap li{padding-left:var(--s1);margin-bottom:var(--s2)}
+.markdown-editor-host .tiptap blockquote{margin:var(--s4) 0;padding:var(--s2) var(--s4);border-left:3px solid var(--a400);border-radius:0 7px 7px 0;background:var(--a50);color:var(--c600)}
+.markdown-editor-host .tiptap code{font-family:var(--font-mono);font-size:.875em;padding:1px 5px;border-radius:4px;background:var(--c100);color:var(--a700)}
+.markdown-editor-host .tiptap pre{margin:var(--s4) 0;padding:var(--s4);overflow-x:auto;border-radius:8px;background:var(--c900);color:var(--a200)}
+.markdown-editor-host .tiptap pre code{padding:0;background:none;color:inherit;font-size:.875rem;line-height:1.75}
 .markdown-editor-host .tiptap img{display:block;max-width:100%;height:auto;margin:var(--s4) 0;border-radius:8px;box-shadow:var(--shadow-sm)}
 .markdown-editor-host .tiptap img[data-width-percent="25"]{width:25%!important}.markdown-editor-host .tiptap img[data-width-percent="33"]{width:33.333%!important}.markdown-editor-host .tiptap img[data-width-percent="50"]{width:50%!important}.markdown-editor-host .tiptap img[data-width-percent="66"]{width:66.667%!important}.markdown-editor-host .tiptap img[data-width-percent="75"]{width:75%!important}.markdown-editor-host .tiptap img[data-width-percent="100"]{width:100%!important}
 .markdown-editor-host .tiptap [data-resize-container]{display:inline-flex!important;width:fit-content!important;max-width:100%;margin:var(--s4) 0;outline:2px solid transparent;transition:outline-color .15s var(--ease)}
@@ -325,7 +331,7 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
 .markdown-editor-host .tiptap .tiptap-image-gallery{display:grid;grid-template-columns:repeat(var(--gallery-columns, 2), minmax(0,1fr));gap:var(--s3);margin:var(--s5) 0}
 .markdown-editor-host .tiptap .tiptap-image-gallery img{width:100%!important;margin:0;min-width:0}
 .markdown-editor-host .tiptap table{border-collapse:collapse;width:100%;margin:var(--s4) 0}.markdown-editor-host .tiptap th,.markdown-editor-host .tiptap td{border:1px solid var(--c200);padding:8px 10px;min-width:80px;vertical-align:top}.markdown-editor-host .tiptap th{background:var(--c100)}
-.markdown-source{display:none;min-height:500px}.markdown-source .modal__textarea{min-height:500px;height:500px;font-family:var(--font-mono);line-height:1.65;resize:vertical}
+.markdown-source{display:none;min-width:0;min-height:500px}.markdown-source .modal__textarea{display:block;width:100%;box-sizing:border-box;min-height:500px;height:500px;font-family:var(--font-mono);line-height:1.65;resize:vertical}
 .markdown-preview{display:none;min-height:500px;max-height:500px;overflow:auto;padding:var(--s4);border:1px solid var(--c200);border-radius:8px;background:var(--c50);line-height:1.7;color:var(--c800)}
 .markdown-preview:empty::before{content:'实时预览会显示在这里';color:var(--c400)}
 .markdown-preview h1,.markdown-preview h2,.markdown-preview h3,.markdown-preview h4{margin:0 0 var(--s3)}
@@ -343,13 +349,16 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
 }
 .modal__tool-btn:hover{background:var(--c200);color:var(--c900);border-color:var(--c300)}
 .modal__tool-btn--icon{min-width:34px;padding:var(--s2);justify-content:center}
-.modal__image-layout{display:none}
+.modal__image-layout{display:inline-flex;align-items:center;overflow:hidden;border:1px solid var(--c200);border-radius:7px;background:var(--c100);flex-shrink:0}
+.modal__image-layout-btn{min-width:36px;padding:var(--s2) var(--s3);border:0;border-right:1px solid var(--c200);background:transparent;color:var(--c500);font:600 .75rem var(--font-sans);cursor:pointer}
+.modal__image-layout-btn:last-child{border-right:0}.modal__image-layout-btn:hover{background:var(--c200);color:var(--c800)}.modal__image-layout-btn--active{background:#fff;color:var(--a700);box-shadow:inset 0 -2px 0 var(--a500)}
 .modal__view-toggle{margin-left:auto;display:inline-flex;padding:3px;border:1px solid var(--c200);border-radius:9px;background:var(--c100);flex-shrink:0}
 .modal__view-btn{border:0;background:transparent;border-radius:7px;padding:6px 10px;font-size:.78rem;font-weight:600;color:var(--c500);cursor:pointer;font-family:var(--font-sans)}
 .modal__view-btn--active{background:#fff;color:var(--a700);box-shadow:var(--shadow-sm)}
 .markdown-editor--source{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--s4)}
 .markdown-editor--source .markdown-editor-host{display:none}
 .markdown-editor--source .markdown-source,.markdown-editor--source .markdown-preview{display:block}
+.markdown-editor-host .tiptap .ProseMirror-selectednode img,.markdown-editor-host .tiptap img.ProseMirror-selectednode{outline:2px solid var(--a500);outline-offset:3px}
 .markdown-preview h1,.markdown-preview h2,.markdown-preview h3,.markdown-preview h4{color:var(--c900);line-height:1.25}
 .markdown-preview h1{font-size:1.75rem}.markdown-preview h2{font-size:1.35rem}.markdown-preview h3{font-size:1.1rem}
 .markdown-preview p,.markdown-preview ul,.markdown-preview ol,.markdown-preview pre,.markdown-preview blockquote,.markdown-preview table{margin:0 0 var(--s3)}
@@ -363,6 +372,12 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
 .markdown-preview input[type="checkbox"]{accent-color:var(--a600)}
 .markdown-preview a{color:var(--a700);text-decoration:none}
 .markdown-preview a:hover{text-decoration:underline}
+.detail__content p,.markdown-preview p{font-size:1rem;color:var(--c600);line-height:1.85;margin-bottom:var(--s4);white-space:pre-wrap}
+.detail__content h1,.markdown-preview h1{font-size:2rem;font-weight:700;letter-spacing:-.03em;color:var(--c900);line-height:1.2;margin-bottom:var(--s4)}
+.detail__content h2,.markdown-preview h2{font-size:1.375rem;font-weight:600;letter-spacing:-.02em;color:var(--c900);line-height:1.3;margin-top:var(--s10);margin-bottom:var(--s4);padding-top:var(--s8);border-top:1px solid var(--c200)}
+.detail__content h3,.markdown-preview h3{font-size:1.125rem;font-weight:600;color:var(--c900);margin-top:var(--s8);margin-bottom:var(--s3)}
+.detail__content ul,.detail__content ol,.markdown-preview ul,.markdown-preview ol{margin:var(--s4) 0;padding-left:var(--s6)}
+.detail__content li,.markdown-preview li{font-size:1rem;color:var(--c600);line-height:1.85;margin-bottom:var(--s2)}
 .detail__content .md-img,.page-view .md-img,.markdown-preview .md-img{width:min(100%,760px);height:auto;margin:var(--s6) 0;display:block;border-radius:11px;box-shadow:var(--shadow-sm)}
 .detail__content .md-img--w-25,.page-view .md-img--w-25,.markdown-preview .md-img--w-25{width:25%}
 .detail__content .md-img--w-33,.page-view .md-img--w-33,.markdown-preview .md-img--w-33{width:33.333%}
@@ -370,8 +385,8 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
 .detail__content .md-img--w-66,.page-view .md-img--w-66,.markdown-preview .md-img--w-66{width:66.667%}
 .detail__content .md-img--w-75,.page-view .md-img--w-75,.markdown-preview .md-img--w-75{width:75%}
 .detail__content .md-img--w-100,.page-view .md-img--w-100,.markdown-preview .md-img--w-100{width:100%}
-.md-image-grid{display:grid;gap:var(--s4);width:min(100%,760px);margin:var(--s6) 0}.md-image-grid--2{grid-template-columns:repeat(2,minmax(0,1fr))}.md-image-grid--3{grid-template-columns:repeat(3,minmax(0,1fr))}.md-image-grid .md-img{width:100%;height:auto;margin:0;display:block;border-radius:9px;box-shadow:var(--shadow-sm)}
-@media(max-width:768px){.detail__content .md-img,.page-view .md-img,.markdown-preview .md-img{width:100%}.md-image-grid--2,.md-image-grid--3,.markdown-editor--source{grid-template-columns:1fr}.markdown-editor-host .tiptap .tiptap-image-gallery{grid-template-columns:1fr}}
+.md-image-grid{display:grid;gap:var(--s4);width:min(100%,960px);margin:var(--s6) 0}.md-image-grid--2{grid-template-columns:repeat(2,minmax(0,1fr))}.md-image-grid--3{grid-template-columns:repeat(3,minmax(0,1fr))}.md-image-grid--4{grid-template-columns:repeat(4,minmax(0,1fr))}.md-image-grid .md-img{width:100%;height:auto;margin:0;display:block;border-radius:9px;box-shadow:var(--shadow-sm)}
+@media(max-width:768px){.detail__content .md-img,.page-view .md-img,.markdown-preview .md-img{width:100%}.md-image-grid--2,.md-image-grid--3,.md-image-grid--4,.markdown-editor--source{grid-template-columns:1fr}.markdown-editor-host .tiptap .tiptap-image-gallery{grid-template-columns:1fr}}
 .markdown-status{display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap;margin-top:var(--s3);font-size:.8125rem;color:var(--c400)}
 .markdown-status span{padding:2px 8px;border-radius:999px;background:var(--c100)}
 .shortcut-grid{display:grid;gap:10px}
@@ -709,18 +724,18 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
           <button type="button" class="modal__tool-btn modal__tool-btn--icon" data-action="markdown-format" data-format="codeBlock" title="代码块 Ctrl+Shift+C">{ }</button>
           <button type="button" class="modal__tool-btn modal__tool-btn--icon" data-action="markdown-format" data-format="table" title="表格">表</button>
           <button type="button" class="modal__tool-btn modal__tool-btn--icon" data-action="markdown-format" data-format="link" title="链接 Ctrl+K">🔗</button>
-          <select class="modal__image-layout" id="imageLayout" aria-label="图片布局">
-            <option value="default">常规图片</option>
-            <option value="50">半宽图片</option>
-            <option value="75">宽图片</option>
-            <option value="100">全宽图片</option>
-            <option value="grid-2">两列图片</option>
-          </select>
+          <div class="modal__image-layout" role="group" aria-label="图片布局">
+            <button type="button" class="modal__image-layout-btn modal__image-layout-btn--active" data-action="set-image-layout" data-image-layout="default" aria-pressed="true" title="单张图片">单图</button>
+            <button type="button" class="modal__image-layout-btn" data-action="set-image-layout" data-image-layout="grid-2" aria-pressed="false" title="两列图片">2 列</button>
+            <button type="button" class="modal__image-layout-btn" data-action="set-image-layout" data-image-layout="grid-3" aria-pressed="false" title="三列图片">3 列</button>
+            <button type="button" class="modal__image-layout-btn" data-action="set-image-layout" data-image-layout="grid-4" aria-pressed="false" title="四列图片">4 列</button>
+          </div>
           <button type="button" class="modal__tool-btn" data-action="upload-image" title="上传并插入图片（单张 ≤ 20MB；两列请选择两张）">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
             插入图片
           </button>
-          <button type="button" class="modal__tool-btn" data-action="upload-gallery" title="选择两张或更多图片，自动插入响应式两列图库">图库</button>
+          <button type="button" class="modal__tool-btn" data-action="upload-gallery" title="选择多张图片，按当前 2/3/4 列布局插入图库">图库</button>
+          <button type="button" class="modal__tool-btn" data-action="delete-selected-image" title="单击图片后删除，也可按 Delete">删除图片</button>
           <button type="button" class="modal__tool-btn modal__tool-btn--icon" data-action="open-shortcut-modal" title="快捷键 Ctrl+/">?</button>
           <div class="modal__view-toggle" aria-label="编辑器视图">
             <button type="button" class="modal__view-btn modal__view-btn--active" data-editor-mode="write" data-action="editor-mode">编辑</button>

@@ -13,6 +13,10 @@ const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_IMAGE_LABEL = '20 MB';
 const ALLOWED_IMAGE_TYPES = /^image\/(png|jpe?g|gif|webp|svg\+xml|avif|bmp)$/i;
 const IMAGE_WIDTHS = new Set(['25', '33', '50', '66', '75', '100']);
+const MIN_GALLERY_COLUMNS = 2;
+const MAX_GALLERY_COLUMNS = 4;
+const LIST_ITEM_PATTERN = /^\s*(?:[-+*]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/;
+const CODE_FENCE_PATTERN = /^\s*(```|~~~)/;
 
 function imageAltText(name) {
   return String(name || 'image').replace(/[\[\]\n\r]/g, ' ').trim() || 'image';
@@ -28,6 +32,24 @@ function imageMarkdown(attrs) {
   if (/^\d+$/.test(width)) return `${base}{width=${width}px}`;
   if (IMAGE_WIDTHS.has(widthPercent)) return `${base}{width=${widthPercent}%}`;
   return base;
+}
+
+function normalizeMarkdownStructure(markdown) {
+  const lines = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
+  const normalized = [];
+  let inCodeFence = false;
+  let previousWasListItem = false;
+
+  lines.forEach((line) => {
+    if (CODE_FENCE_PATTERN.test(line)) inCodeFence = !inCodeFence;
+    const isListItem = !inCodeFence && LIST_ITEM_PATTERN.test(line);
+    const isPlainTopLevelLine = !inCodeFence && line.trim() && !isListItem && !/^\s/.test(line);
+    if (previousWasListItem && isPlainTopLevelLine) normalized.push('');
+    normalized.push(line);
+    previousWasListItem = isListItem;
+  });
+
+  return normalized.join('\n');
 }
 
 const VeldrImage = Image.extend({
@@ -78,7 +100,7 @@ const ImageGallery = Node.create({
     return [{ tag: 'div[data-veldr-image-gallery]' }];
   },
   renderHTML({ HTMLAttributes }) {
-    const columns = Math.min(3, Math.max(2, Number(HTMLAttributes.columns) || 2));
+    const columns = Math.min(MAX_GALLERY_COLUMNS, Math.max(MIN_GALLERY_COLUMNS, Number(HTMLAttributes.columns) || MIN_GALLERY_COLUMNS));
     return ['div', mergeAttributes(HTMLAttributes, {
       'data-veldr-image-gallery': '',
       class: 'tiptap-image-gallery',
@@ -86,15 +108,33 @@ const ImageGallery = Node.create({
     }), 0];
   },
   renderMarkdown(node, helpers) {
-    const columns = Math.min(3, Math.max(2, Number(node.attrs?.columns) || 2));
+    const columns = Math.min(MAX_GALLERY_COLUMNS, Math.max(MIN_GALLERY_COLUMNS, Number(node.attrs?.columns) || MIN_GALLERY_COLUMNS));
     return `:::images{columns=${columns}}\n${helpers.renderChildren(node.content || [], '\n')}\n:::\n\n`;
   },
 });
 
-function normalizeImageWidths(markdown) {
+function normalizeEscapedImageMarkdown(markdown) {
   return String(markdown || '').replace(
+    /!\\+\[([\s\S]*?)\\+\]\(([^)\r\n]*)\)/g,
+    (_, alt, target) => {
+      const cleanAlt = String(alt).replace(/\\+([\[\]\\])/g, '$1');
+      const cleanTarget = String(target).replace(/\\+([_()[\]\\])/g, '$1');
+      return `![${cleanAlt}](${cleanTarget})`;
+    },
+  );
+}
+
+function normalizeImageWidths(markdown) {
+  return normalizeEscapedImageMarkdown(markdown).replace(
     /!\[([^\]]*)\]\(([^\s)]+)(?:\s+"[^"]*")?\)\{width=(\d+)(%|px)?\}/g,
     (_, alt, href, width, unit) => `![${alt}](${href} "veldr-width=${width}${unit || 'px'}")`,
+  );
+}
+
+function promoteIndentedImageBlocks(markdown) {
+  return String(markdown || '').replace(
+    /^[\t ]+(!\[[^\]]*\]\([^\r\n]+\)(?:\{width=\d+(?:%|px)?\})?)\s*$/gm,
+    '\n$1\n',
   );
 }
 
@@ -120,12 +160,12 @@ function galleryImages(markdown) {
 
 function parseLegacyMarkdown(editor, markdown) {
   const galleries = [];
-  const source = normalizeImageWidths(markdown).replace(
-    /^:::images\{columns=(2|3)\}\s*$([\s\S]*?)^:::\s*$/gm,
+  const source = promoteIndentedImageBlocks(normalizeMarkdownStructure(normalizeImageWidths(markdown))).replace(
+    /^:::images\{columns=(2|3|4)\}\s*$([\s\S]*?)^:::\s*$/gm,
     (_, columns, body) => {
       const token = `VELDR_GALLERY_${galleries.length}_TOKEN`;
       galleries.push({ columns: Number(columns), images: galleryImages(body) });
-      return token;
+      return `\n\n${token}\n\n`;
     },
   );
   const content = editor.markdown.parse(source);
@@ -208,9 +248,14 @@ export const editorMethods = {
     const host = document.getElementById('noteContentHost');
     if (!host) return null;
 
-    const receiveFiles = (files, position) => this.uploadImageFiles(files, {
-      mode: files.length > 1 ? 'gallery' : 'image', position,
-    });
+    const receiveFiles = (files, position) => {
+      const layout = this.getSelectedImageLayout();
+      this.uploadImageFiles(files, {
+        mode: files.length > 1 ? 'gallery' : layout.mode,
+        columns: layout.columns,
+        position,
+      });
+    };
 
     this.richEditor = new Editor({
       element: host,
@@ -233,6 +278,23 @@ export const editorMethods = {
       editorProps: {
         attributes: { class: 'tiptap' },
         handleKeyDown: (_view, event) => this.handleEditorKeydown(event),
+        handleClickOn: (_view, _position, node, nodePosition) => {
+          if (node.type.name !== 'image' || !this.richEditor) return false;
+          this.richEditor.chain().focus().setNodeSelection(nodePosition).run();
+          return true;
+        },
+        handleDOMEvents: {
+          click: (view, event) => {
+            if (!(event.target instanceof Element) || !event.target.closest('img')) return false;
+            const hit = view.posAtCoords({ left: event.clientX, top: event.clientY });
+            const candidates = [hit?.pos, hit?.pos && hit.pos - 1].filter(Number.isInteger);
+            const imagePosition = candidates.find((position) => view.state.doc.nodeAt(position)?.type.name === 'image');
+            if (!Number.isInteger(imagePosition) || !this.richEditor) return false;
+            this.richEditor.chain().focus().setNodeSelection(imagePosition).run();
+            event.preventDefault();
+            return true;
+          },
+        },
       },
       onUpdate: () => {
         this.clearPercentWidthAfterResize();
@@ -244,8 +306,8 @@ export const editorMethods = {
 
   getEditorMarkdown() {
     const source = document.getElementById('noteContent');
-    if (this.currentEditorMode === 'source' && source) return source.value;
-    return this.richEditor?.getMarkdown?.() || '';
+    if (this.currentEditorMode === 'source' && source) return normalizeMarkdownStructure(source.value);
+    return normalizeMarkdownStructure(this.richEditor?.getMarkdown?.() || '');
   },
 
   clearPercentWidthAfterResize() {
@@ -265,7 +327,7 @@ export const editorMethods = {
   setEditorMarkdown(markdown) {
     const editor = this.ensureRichEditor();
     if (!editor) return;
-    const source = String(markdown || '');
+    const source = normalizeMarkdownStructure(normalizeImageWidths(markdown));
     const sourceEl = document.getElementById('noteContent');
     if (sourceEl) sourceEl.value = source;
     editor.commands.setContent(parseLegacyMarkdown(editor, source), { emitUpdate: false });
@@ -366,6 +428,11 @@ export const editorMethods = {
       button.classList.toggle('modal__view-btn--active', button.dataset.editorMode === nextMode);
     });
     this.updateMarkdownPreview(true);
+    if (nextMode === 'source') {
+      if (source) source.scrollTop = 0;
+      const preview = document.getElementById('markdownPreview');
+      if (preview) preview.scrollTop = 0;
+    }
   },
 
   cycleEditorMode() { this.setEditorMode(this.currentEditorMode === 'write' ? 'source' : 'write'); },
@@ -490,9 +557,34 @@ export const editorMethods = {
     }
   },
 
+  deleteSelectedImage(options = {}) {
+    const editor = this.richEditor;
+    const selection = editor?.state.selection;
+    const selectedImage = selection?.node?.type?.name === 'image';
+    if (!editor || this.currentEditorMode === 'source' || !selectedImage) {
+      if (!options.silent) this.toast('请先单击需要删除的图片，再按 Delete 或点击删除图片');
+      return false;
+    }
+
+    const parent = selection.$from.parent;
+    if (parent.type.name === 'imageGallery' && parent.childCount === 1) {
+      const galleryPosition = selection.$from.before(selection.$from.depth);
+      editor.chain().focus().setNodeSelection(galleryPosition).deleteSelection().run();
+    } else {
+      editor.chain().focus().deleteSelection().run();
+    }
+    return true;
+  },
+
   handleEditorKeydown(event) {
     const primary = event.ctrlKey || event.metaKey;
     if (!primary) {
+      if (event.key === 'Backspace' || event.key === 'Delete') {
+        if (this.deleteSelectedImage({ silent: true })) {
+          event.preventDefault();
+          return true;
+        }
+      }
       if (event.key === 'Tab') {
         const editor = this.richEditor;
         const command = event.shiftKey ? editor.chain().focus().liftListItem('listItem') : editor.chain().focus().sinkListItem('listItem');
@@ -513,8 +605,39 @@ export const editorMethods = {
     return false;
   },
 
-  uploadImage() { const input = document.getElementById('imageInput'); input.dataset.insertMode = 'image'; input.click(); },
-  uploadGallery() { const input = document.getElementById('imageInput'); input.dataset.insertMode = 'gallery'; input.click(); },
+  getSelectedImageLayout() {
+    const value = this.imageLayout || 'default';
+    const columns = Number(value.replace('grid-', ''));
+    return Number.isInteger(columns) && columns >= MIN_GALLERY_COLUMNS && columns <= MAX_GALLERY_COLUMNS
+      ? { mode: 'gallery', columns }
+      : { mode: 'image', columns: null };
+  },
+
+  setImageLayout(value) {
+    const allowed = new Set(['default', 'grid-2', 'grid-3', 'grid-4']);
+    this.imageLayout = allowed.has(value) ? value : 'default';
+    document.querySelectorAll('[data-action="set-image-layout"]').forEach((button) => {
+      const active = button.dataset.imageLayout === this.imageLayout;
+      button.classList.toggle('modal__image-layout-btn--active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+  },
+
+  uploadImage() {
+    const input = document.getElementById('imageInput');
+    const layout = this.getSelectedImageLayout();
+    input.dataset.insertMode = layout.mode;
+    input.dataset.galleryColumns = layout.columns || '';
+    input.click();
+  },
+
+  uploadGallery() {
+    const input = document.getElementById('imageInput');
+    const layout = this.getSelectedImageLayout();
+    input.dataset.insertMode = 'gallery';
+    input.dataset.galleryColumns = layout.columns || MIN_GALLERY_COLUMNS;
+    input.click();
+  },
 
   validateImageFile(file) {
     if (!file || !ALLOWED_IMAGE_TYPES.test(String(file.type || ''))) { this.toast('请选择 PNG、JPG、GIF、WebP、SVG、AVIF 或 BMP 图片'); return false; }
@@ -533,8 +656,9 @@ export const editorMethods = {
 
   async handleImageSelected(event) {
     const files = Array.from(event.target.files || []); const mode = event.target.dataset.insertMode || 'image';
-    event.target.value = ''; event.target.dataset.insertMode = '';
-    if (files.length) await this.uploadImageFiles(files, { mode });
+    const columns = Number(event.target.dataset.galleryColumns) || null;
+    event.target.value = ''; event.target.dataset.insertMode = ''; event.target.dataset.galleryColumns = '';
+    if (files.length) await this.uploadImageFiles(files, { mode, columns });
   },
 
   async uploadImageFiles(files, options = {}) {
@@ -568,9 +692,10 @@ export const editorMethods = {
   insertUploadedImages(images, options = {}) {
     if (!images.length) return;
     const useGallery = options.mode === 'gallery' && images.length > 1;
+    const galleryColumns = Math.min(MAX_GALLERY_COLUMNS, Math.max(MIN_GALLERY_COLUMNS, Number(options.columns) || MIN_GALLERY_COLUMNS));
     if (this.currentEditorMode === 'source') {
       const markdown = useGallery
-        ? `\n:::images{columns=2}\n${images.map((image) => imageMarkdown({ ...image, widthPercent: 100 })).join('\n')}\n:::\n`
+        ? `\n:::images{columns=${galleryColumns}}\n${images.map((image) => imageMarkdown({ ...image, widthPercent: 100 })).join('\n')}\n:::\n`
         : images.map((image) => imageMarkdown(image)).join('\n');
       const source = document.getElementById('noteContent');
       const start = source.selectionStart; source.setRangeText(markdown, start, source.selectionEnd, 'end'); this.handleSourceInput(); return;
@@ -585,7 +710,7 @@ export const editorMethods = {
       },
     });
     const content = useGallery
-      ? { type: 'imageGallery', attrs: { columns: 2 }, content: images.map((image) => nodeForImage(image, true)) }
+      ? { type: 'imageGallery', attrs: { columns: galleryColumns }, content: images.map((image) => nodeForImage(image, true)) }
       : images.map((image) => nodeForImage(image));
     const chain = this.richEditor.chain().focus();
     if (Number.isInteger(options.position)) chain.insertContentAt(options.position, content).run();

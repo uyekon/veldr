@@ -39,6 +39,12 @@ const clickActions = {
   'markdown-format': (App, el) => App.applyMarkdownFormat(el.dataset.format),
   'editor-mode': (App, el) => App.setEditorMode(el.dataset.editorMode),
   'logout': (App) => App.logout(),
+  'toggle-profile-menu': (App, el) => {
+    const menu = document.getElementById('profileMenu');
+    if (!menu) return;
+    const open = menu.classList.toggle('topnav__profile-menu--open');
+    el.setAttribute('aria-expanded', String(open));
+  },
   'submit-login': (App) => App.submitLogin(),
   'enter-viewer-mode': (App) => App.enterViewerMode(),
 };
@@ -50,6 +56,14 @@ export function installDelegation(App) {
     const handler = clickActions[el.dataset.action];
     if (!handler) return;
     handler(App, el);
+  });
+
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('.topnav__profile')) return;
+    const menu = document.getElementById('profileMenu');
+    const avatar = document.getElementById('profileAvatar');
+    menu?.classList.remove('topnav__profile-menu--open');
+    avatar?.setAttribute('aria-expanded', 'false');
   });
 
   // 笔记卡片 role="button"：补齐键盘可达（Enter / Space 打开详情）

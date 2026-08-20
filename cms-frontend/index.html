@@ -420,6 +420,14 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
 .topnav__role--viewer{color:var(--info);background:#eff6ff}
 .topnav__logout,.topnav__password{padding:var(--s2) var(--s4);font-size:.8125rem;font-weight:500;font-family:var(--font-sans);color:var(--c600);background:var(--c100);border:1px solid var(--c200);border-radius:7px;cursor:pointer;transition:all .15s var(--ease)}
 .topnav__logout:hover,.topnav__password:hover{background:var(--c200);color:var(--c900)}
+.topnav__profile{position:relative}
+.topnav__avatar{width:38px;height:38px;padding:0;border:2px solid #fff;border-radius:50%;overflow:hidden;cursor:pointer;box-shadow:0 2px 8px rgb(15 23 42/.16);background:var(--a100)}
+.topnav__avatar img{display:block;width:100%;height:100%;object-fit:cover}
+.topnav__profile-menu{position:absolute;right:0;top:calc(100% + 10px);z-index:30;display:none;min-width:170px;padding:7px;border:1px solid var(--c200);border-radius:12px;background:#fff;box-shadow:0 12px 30px rgb(15 23 42/.16)}
+.topnav__profile-menu--open{display:grid;gap:3px}
+.topnav__profile-menu button{width:100%;padding:9px 11px;border:0;border-radius:8px;background:transparent;color:var(--c700);text-align:left;font:500 .8125rem var(--font-sans);cursor:pointer}
+.topnav__profile-menu button:hover{background:var(--c100);color:var(--c900)}
+.topnav__profile-menu .topnav__role{display:block;margin:2px 4px 5px;text-align:center}
 
 /* ===== Responsive ===== */
 @media(max-width:768px){
@@ -562,11 +570,16 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
       <input type="search" class="topnav__search-input" id="searchInput" placeholder="搜索笔记..." aria-label="搜索笔记">
     </div>
     <button class="topnav__mobile-filter" id="mobileFilterBtn" data-action="open-filter-sheet" type="button">筛选</button>
-    <span class="topnav__role" id="roleBadge" style="display:none"></span>
     <button class="topnav__btn" id="newNoteBtn" style="display:none" data-action="open-note-modal">+ 新建笔记</button>
-    <button class="topnav__btn" data-action="open-media-library" type="button">视频库</button>
-    <button class="topnav__password" id="passwordBtn" style="display:none" data-action="open-password-modal" type="button">修改密码</button>
-    <button class="topnav__logout" id="logoutBtn" style="display:none" data-action="logout" title="输入编辑密码">编辑登录</button>
+    <div class="topnav__profile">
+      <button class="topnav__avatar" id="profileAvatar" data-action="toggle-profile-menu" type="button" aria-label="打开用户菜单" aria-expanded="false"><img src="/assets/noteflow-avatar.png" alt="用户头像"></button>
+      <div class="topnav__profile-menu" id="profileMenu" aria-label="用户菜单">
+        <span class="topnav__role" id="roleBadge" style="display:none"></span>
+        <button data-action="open-media-library" type="button">视频库</button>
+        <button id="passwordBtn" style="display:none" data-action="open-password-modal" type="button">修改密码</button>
+        <button id="logoutBtn" style="display:none" data-action="logout" title="输入编辑密码">编辑登录</button>
+      </div>
+    </div>
   </div>
 </nav>
 

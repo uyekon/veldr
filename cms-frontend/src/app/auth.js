@@ -68,6 +68,7 @@ export const authMethods = {
   },
 
   async logout() {
+    if (!this.confirmEditorExit()) return;
     if (this.role !== 'editor') {
       this.showLogin();
       return;

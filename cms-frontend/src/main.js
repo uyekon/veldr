@@ -38,6 +38,12 @@ const boot = () => {
   installRouter(App);
   App.init();
 
+  window.addEventListener('beforeunload', (event) => {
+    if (!App.hasUnsavedEditorInput?.()) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
+
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) App.refreshFromServer('visibility');
   });

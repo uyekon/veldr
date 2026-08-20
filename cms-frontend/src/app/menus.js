@@ -4,6 +4,7 @@ import { PAGE_CONTENT } from '../page-content.js';
 // ===== 导航与顶部菜单（可编辑笔记本） =====
 export const menuMethods = {
   navTo(target) {
+    if (!this.confirmEditorExit()) return;
     this.currentNav = target;
     this.currentNote = null;
     this.currentFilter = 'all';

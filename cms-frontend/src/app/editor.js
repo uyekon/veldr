@@ -290,8 +290,18 @@ export const editorMethods = {
     return Boolean(document.getElementById('noteTitle')?.value.trim() || this.getEditorMarkdown().trim());
   },
 
+  confirmEditorExit() {
+    const modal = document.getElementById('noteModal');
+    if (!modal?.classList.contains('modal-overlay--active') || !this.hasUnsavedEditorInput()) return true;
+    if (confirm('有未保存的修改，确定要离开编辑吗？')) {
+      void saveDraft(this.getEditorDraft()).catch(() => {});
+      return true;
+    }
+    return false;
+  },
+
   closeModal(options = {}) {
-    if (!options.force && this.role === 'editor' && this.hasUnsavedEditorInput() && !confirm('有未保存的修改，确定要关闭吗？')) return;
+    if (!options.force && this.role === 'editor' && !this.confirmEditorExit()) return;
     if (!options.force && this.hasUnsavedEditorInput()) {
       void saveDraft(this.getEditorDraft()).catch(() => {});
     }

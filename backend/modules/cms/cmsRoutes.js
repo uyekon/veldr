@@ -2,6 +2,9 @@ import express from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import fsp from 'fs/promises';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import rateLimit from 'express-rate-limit';
 import { attachAuthState, clearAuthCookie } from '../../middleware/auth.js';
 import { asyncHandler } from '../../middleware/errorHandler.js';
@@ -9,6 +12,7 @@ import { loadDB, persistDB, nextId, normalizeTags, uploadDir } from './cmsStore.
 import { authenticateCms, setSharedEditorPassword, verifyEditorPassword, requireEditor, requireViewer } from './cmsAuth.js';
 
 const router = express.Router();
+const execFileAsync = promisify(execFile);
 
 const send = (res, status, data) => res.status(status).json(data);
 
@@ -27,6 +31,9 @@ const cmsAuthLimiter = rateLimit({
 });
 
 const allowedImages = /^image\/(png|jpe?g|gif|webp|svg\+xml|avif|bmp)$/i;
+const allowedVideos = new Set(['video/mp4', 'video/webm', 'video/ogg']);
+const videoUploadDir = path.join(uploadDir, 'videos');
+const videoPosterDir = path.join(uploadDir, 'video-posters');
 const nowIso = () => new Date().toISOString();
 const noteVersion = (note) => Number(note.version) || 1;
 const safeCategoryId = (label) => String(label || '')
@@ -77,6 +84,26 @@ const upload = multer({
     else cb(new Error('Only image files are allowed'));
   },
 });
+
+const videoUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => { fs.mkdirSync(videoUploadDir, { recursive: true }); cb(null, videoUploadDir); },
+    filename: (req, file, cb) => cb(null, `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}${path.extname(file.originalname).toLowerCase() || '.mp4'}`),
+  }),
+  limits: { fileSize: 500 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, allowedVideos.has(file.mimetype)),
+});
+
+const probeVideo = async (filename) => {
+  const { stdout } = await execFileAsync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type,width,height', '-of', 'json', filename], { maxBuffer: 1024 * 1024 });
+  const data = JSON.parse(stdout);
+  const stream = (data.streams || []).find(item => item.codec_type === 'video');
+  const duration = Number(data.format?.duration || 0);
+  if (!stream || !duration || duration > 600) throw new Error('视频必须包含画面且时长不能超过 10 分钟');
+  return { duration: Math.round(duration), width: Number(stream.width || 0), height: Number(stream.height || 0) };
+};
+
+const isReferenced = (db, filename) => db.notes.some(note => String(note.content || '').includes(`/uploads/cms/videos/${filename}`));
 
 router.use(attachAuthState);
 
@@ -329,6 +356,48 @@ router.delete('/menus/:id', editor, asyncHandler(async (req, res) => {
     note.notebookId === id ? { ...note, notebookId: null } : note
   ));
   await persistDB();
+  return send(res, 200, { ok: true });
+}));
+
+router.get('/media', viewer, asyncHandler(async (req, res) => {
+  const db = await loadDB();
+  const search = String(req.query.search || '').trim().toLowerCase();
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const pageSize = Math.min(50, Math.max(1, Number(req.query.pageSize) || 20));
+  const filtered = db.media.filter(item => !search || `${item.originalName} ${item.mime}`.toLowerCase().includes(search));
+  const items = filtered.slice((page - 1) * pageSize, page * pageSize);
+  return send(res, 200, { items, total: filtered.length, page, pageSize });
+}));
+
+router.post('/media', editor, (req, res) => {
+  videoUpload.single('video')(req, res, async (error) => {
+    if (error || !req.file) return send(res, 400, { error: error?.message || '请选择 MP4、WebM 或 Ogg 视频' });
+    try {
+      const meta = await probeVideo(req.file.path);
+      const db = await loadDB();
+      const id = `media_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const posterName = `${id}.jpg`;
+      fs.mkdirSync(videoPosterDir, { recursive: true });
+      await execFileAsync('ffmpeg', ['-y', '-ss', '0', '-i', req.file.path, '-frames:v', '1', '-vf', 'scale=640:-2', path.join(videoPosterDir, posterName)], { maxBuffer: 1024 * 1024 });
+      const item = { id, originalName: req.file.originalname, mime: req.file.mimetype, size: req.file.size, duration: meta.duration, width: meta.width, height: meta.height, url: `/uploads/cms/videos/${req.file.filename}`, posterUrl: `/uploads/cms/video-posters/${posterName}`, createdAt: new Date().toISOString() };
+      db.media.unshift(item); await persistDB();
+      return send(res, 201, item);
+    } catch (probeError) {
+      await fsp.unlink(req.file.path).catch(() => {});
+      return send(res, 400, { error: probeError.message || '视频校验失败' });
+    }
+  });
+});
+
+router.delete('/media/:id', editor, asyncHandler(async (req, res) => {
+  const db = await loadDB();
+  const index = db.media.findIndex(item => item.id === req.params.id);
+  if (index < 0) return send(res, 404, { error: '媒体不存在' });
+  const item = db.media[index]; const filename = path.basename(new URL(`http://cms${item.url}`).pathname);
+  if (isReferenced(db, filename)) return send(res, 409, { error: '视频仍被笔记引用，不能删除' });
+  db.media.splice(index, 1); await persistDB();
+  await fsp.unlink(path.join(videoUploadDir, filename)).catch(() => {});
+  if (item.posterUrl) await fsp.unlink(path.join(videoPosterDir, path.basename(item.posterUrl))).catch(() => {});
   return send(res, 200, { ok: true });
 }));
 

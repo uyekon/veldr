@@ -688,6 +688,7 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
             插入图片
           </button>
+          <button type="button" class="modal__tool-btn" data-action="upload-video" title="上传并插入视频（≤ 500MB，≤ 10分钟）">🎬 插入视频</button>
           <button type="button" class="modal__tool-btn modal__tool-btn--icon" data-action="open-shortcut-modal" title="快捷键 Ctrl+/">?</button>
           <div class="modal__view-toggle" aria-label="编辑器视图">
             <button type="button" class="modal__view-btn modal__view-btn--active" data-editor-mode="split" data-action="editor-mode">分屏</button>
@@ -695,6 +696,7 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
             <button type="button" class="modal__view-btn" data-editor-mode="preview" data-action="editor-mode">预览</button>
           </div>
           <input type="file" id="imageInput" accept="image/*" style="display:none">
+          <input type="file" id="videoInput" accept="video/mp4,video/webm,video/ogg" style="display:none">
         </div>
         <div class="markdown-editor markdown-editor--split" id="markdownEditor">
           <div class="markdown-source">

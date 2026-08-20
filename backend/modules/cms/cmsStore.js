@@ -25,6 +25,7 @@ const defaultDB = () => ({
   menus: [
     { id: 'docs', label: 'Docs', type: 'docs' },
   ],
+  media: [],
 });
 
 const ensureRuntimeDirs = async () => {
@@ -48,6 +49,7 @@ const loadDB = async () => {
   if (!Array.isArray(db.notes)) db.notes = [];
   if (!Array.isArray(db.categories)) db.categories = defaultDB().categories;
   if (!Array.isArray(db.menus)) db.menus = [];
+  if (!Array.isArray(db.media)) db.media = [];
   return db;
 };
 

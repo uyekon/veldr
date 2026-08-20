@@ -485,6 +485,23 @@ export const editorMethods = {
     }
   },
 
+  uploadVideo() { document.getElementById('videoInput')?.click(); },
+
+  async handleVideoSelected(e) {
+    if (this.role !== 'editor') { this.toast('需要编辑密码'); e.target.value = ''; return; }
+    const file = e.target.files?.[0]; e.target.value = '';
+    if (!file) return;
+    const fd = new FormData(); fd.append('video', file);
+    this.showLoading(true);
+    try {
+      const res = await fetch(apiPath('/media'), { method: 'POST', credentials: 'include', headers: this.accessKey ? { 'X-Access-Key': this.accessKey } : {}, body: fd });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || '视频上传失败');
+      this.replaceEditorSelection(`\n<video controls preload="metadata" poster="${data.posterUrl || ''}" src="${data.url}"></video>\n`);
+      this.updateMarkdownPreview(); this.toast('视频已上传并插入');
+    } catch (err) { this.toast(err.message); } finally { this.showLoading(false); }
+  },
+
   insertMarkdownImage(name, url) {
     const safeName = String(name || 'image').replace(/[\[\]\n\r]/g, ' ').trim() || 'image';
     const snippet = `![${safeName}](${url})`;

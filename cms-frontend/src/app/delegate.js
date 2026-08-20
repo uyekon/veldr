@@ -33,6 +33,7 @@ const clickActions = {
   'save-note': (App) => App.saveNote(),
   'delete-editing-note': (App) => App.deleteNote(),
   'upload-image': (App) => App.uploadImage(),
+  'upload-video': (App) => App.uploadVideo(),
   'markdown-format': (App, el) => App.applyMarkdownFormat(el.dataset.format),
   'editor-mode': (App, el) => App.setEditorMode(el.dataset.editorMode),
   'logout': (App) => App.logout(),
@@ -80,6 +81,7 @@ export function installDelegation(App) {
   bind('noteCategory', 'change', () => App.scheduleAutosave());
   bind('noteTags', 'input', () => App.scheduleAutosave());
   bind('imageInput', 'change', (e) => App.handleImageSelected(e));
+  bind('videoInput', 'change', (e) => App.handleVideoSelected(e));
   bind('noteContent', 'input', () => App.updateMarkdownPreview());
   bind('noteContent', 'keydown', (e) => App.handleEditorKeydown(e));
   bind('noteContent', 'paste', (e) => App.handleEditorPaste(e));

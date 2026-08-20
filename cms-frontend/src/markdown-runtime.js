@@ -39,13 +39,15 @@ window.CMSMarkdown = {
   render(source) {
     const html = marked.parse(source || '');
     return DOMPurify.sanitize(html, {
-      ADD_ATTR: ['target', 'rel', 'loading'],
+      ADD_TAGS: ['video', 'source'],
+      ADD_ATTR: ['target', 'rel', 'loading', 'controls', 'preload', 'poster', 'src', 'type'],
     });
   },
   // For server-provided HTML (e.g. custom menu page content)
   sanitize(html) {
     return DOMPurify.sanitize(String(html || ''), {
-      ADD_ATTR: ['target', 'rel', 'loading'],
+      ADD_TAGS: ['video', 'source'],
+      ADD_ATTR: ['target', 'rel', 'loading', 'controls', 'preload', 'poster', 'src', 'type'],
     });
   },
 };

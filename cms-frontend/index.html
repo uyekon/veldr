@@ -473,6 +473,9 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
 .topnav__profile-menu button{width:100%;padding:9px 11px;border:0;border-radius:8px;background:transparent;color:var(--c700);text-align:left;font:500 .8125rem var(--font-sans);cursor:pointer}
 .topnav__profile-menu button:hover{background:var(--c100);color:var(--c900)}
 .topnav__profile-menu .topnav__role{display:block;margin:2px 4px 5px;text-align:center}
+.page-view__media-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+.page-view__media-card{min-width:0;border:1px solid var(--c200);border-radius:10px;padding:12px;background:#fff}
+.page-view__media-card video{display:block;width:100%;aspect-ratio:16/9;object-fit:contain;background:#111;border-radius:7px}
 
 /* ===== Responsive ===== */
 @media(max-width:768px){
@@ -505,6 +508,9 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
     color:var(--c700);font-family:var(--font-sans);font-size:.8125rem;font-weight:600;
     white-space:nowrap;cursor:pointer;
   }
+  .topnav__profile{display:flex;justify-content:center;align-items:center;min-width:0}
+  .topnav__avatar{width:40px;height:40px}
+  .topnav__profile-menu{right:0;min-width:190px}
   .topnav__role{display:none!important}
   .topnav__btn{height:40px;width:100%;padding:0 10px;border-radius:9px;font-size:.8125rem}
   .topnav__logout{height:40px;width:100%;padding:0 10px;border-radius:9px;font-size:.8125rem;background:#fff}
@@ -522,7 +528,8 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
   .mobile-sheet-open .main{overflow:hidden}
   .modal{max-width:95vw;max-height:90vh}
   .modal__body{padding:var(--s4)}
-  .modal__toolbar{flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px}
+  .modal__toolbar{flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+  .modal__toolbar > *{flex:0 0 auto}
   .modal__view-toggle{margin-left:0}
   .markdown-editor-host{min-height:360px}.markdown-editor-host .tiptap{min-height:330px;padding:var(--s4)}
   .markdown-preview{min-height:360px;max-height:420px}

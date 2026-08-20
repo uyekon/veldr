@@ -470,7 +470,8 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
   .modal__toolbar{flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px}
   .modal__view-toggle{margin-left:0}
   .markdown-editor{grid-template-columns:1fr}
-  .markdown-editor--split .markdown-preview{display:none}
+  /* 预览编辑在移动端改为上下堆叠，仍同时保留源码和实时预览 */
+  .markdown-editor--split .markdown-preview{display:block}
   .markdown-editor--preview .markdown-preview{display:block}
   .markdown-editor--preview .markdown-source{display:none}
   .modal__textarea,.markdown-preview{min-height:360px;max-height:420px}
@@ -692,9 +693,9 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
           <button type="button" class="modal__tool-btn" data-action="upload-video" title="上传并插入视频（≤ 500MB，≤ 10分钟）">🎬 插入视频</button>
           <button type="button" class="modal__tool-btn modal__tool-btn--icon" data-action="open-shortcut-modal" title="快捷键 Ctrl+/">?</button>
           <div class="modal__view-toggle" aria-label="编辑器视图">
-            <button type="button" class="modal__view-btn modal__view-btn--active" data-editor-mode="split" data-action="editor-mode">分屏</button>
-            <button type="button" class="modal__view-btn" data-editor-mode="write" data-action="editor-mode">只写</button>
-            <button type="button" class="modal__view-btn" data-editor-mode="preview" data-action="editor-mode">预览</button>
+            <button type="button" class="modal__view-btn modal__view-btn--active" data-editor-mode="split" data-action="editor-mode">预览编辑</button>
+            <button type="button" class="modal__view-btn" data-editor-mode="write" data-action="editor-mode">源码</button>
+            <button type="button" class="modal__view-btn" data-editor-mode="preview" data-action="editor-mode">只读预览</button>
           </div>
           <input type="file" id="imageInput" accept="image/*" style="display:none">
           <input type="file" id="videoInput" accept="video/mp4,video/webm,video/ogg" style="display:none">

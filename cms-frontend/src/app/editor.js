@@ -39,7 +39,9 @@ export const editorMethods = {
     modal.classList.add('modal-overlay--active');
     this.autosaveDirty = false;
     this.conflictPending = false;
-    this.setEditorMode(this.isMobile() ? 'write' : 'split');
+    // 每次打开笔记默认使用“预览编辑”：左侧编辑源码，右侧实时预览。
+    // 移动端也保持同一默认模式，用户可手动切换到源码或只读预览。
+    this.setEditorMode('split');
     this.suppressAutosave = true;
     this.updateMarkdownPreview(true);
     this.suppressAutosave = false;
@@ -197,7 +199,7 @@ export const editorMethods = {
   },
 
   cycleEditorMode() {
-    const order = this.isMobile() ? ['write', 'preview', 'split'] : ['split', 'write', 'preview'];
+    const order = ['split', 'write', 'preview'];
     const index = Math.max(0, order.indexOf(this.currentEditorMode));
     this.setEditorMode(order[(index + 1) % order.length]);
   },

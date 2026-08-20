@@ -85,6 +85,7 @@ export function installDelegation(App) {
   bind('imageInput', 'change', (e) => App.handleImageSelected(e));
   bind('videoInput', 'change', (e) => App.handleVideoSelected(e));
   bind('noteContent', 'input', () => App.updateMarkdownPreview());
+  bind('markdownPreview', 'input', (e) => App.handlePreviewEdit(e));
   bind('noteContent', 'keydown', (e) => App.handleEditorKeydown(e));
   bind('noteContent', 'paste', (e) => App.handleEditorPaste(e));
   bind('noteContent', 'drop', (e) => App.handleEditorDrop(e));

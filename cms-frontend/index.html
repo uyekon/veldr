@@ -330,6 +330,8 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
 .markdown-source{min-width:0}
 .modal__textarea{min-height:420px;font-family:var(--font-mono)}
 .markdown-editor{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.markdown-editor--split{grid-template-columns:1fr}
+.markdown-editor--split .markdown-source{display:none}
 .markdown-editor--write{grid-template-columns:1fr}
 .markdown-editor--write .markdown-preview{display:none}
 .markdown-editor--preview{grid-template-columns:1fr}
@@ -470,7 +472,6 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
   .modal__toolbar{flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px}
   .modal__view-toggle{margin-left:0}
   .markdown-editor{grid-template-columns:1fr}
-  /* 预览编辑在移动端改为上下堆叠，仍同时保留源码和实时预览 */
   .markdown-editor--split .markdown-preview{display:block}
   .markdown-editor--preview .markdown-preview{display:block}
   .markdown-editor--preview .markdown-source{display:none}

@@ -186,6 +186,8 @@ export const editorMethods = {
     const safeMode = ['split', 'write', 'preview'].includes(mode) ? mode : 'split';
     this.currentEditorMode = safeMode;
     editor.className = `markdown-editor markdown-editor--${safeMode}`;
+    const preview = document.getElementById('markdownPreview');
+    if (preview) preview.contentEditable = safeMode === 'split' ? 'true' : 'false';
     document.querySelectorAll('.modal__view-btn').forEach(btn => {
       btn.classList.toggle('modal__view-btn--active', btn.dataset.editorMode === safeMode);
     });
@@ -222,6 +224,17 @@ export const editorMethods = {
     const preview = document.getElementById('markdownPreview');
     if (!content || !preview) return;
     preview.innerHTML = this.renderMarkdown(content.value);
+    preview.contentEditable = this.currentEditorMode === 'split' ? 'true' : 'false';
+  },
+
+  handlePreviewEdit(event) {
+    if (this.currentEditorMode !== 'split') return;
+    const source = document.getElementById('noteContent');
+    if (!source) return;
+    // 预览编辑保留可读的纯文本内容作为 Markdown 源，源码模式可继续精细调整格式。
+    source.value = event.currentTarget.innerText.replace(/\u00a0/g, ' ');
+    this.updateMarkdownStats();
+    this.scheduleAutosave();
   },
 
   updateMarkdownStats() {

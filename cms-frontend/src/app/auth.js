@@ -1,38 +1,23 @@
-import { apiPath, ACCESS_KEY_STORAGE } from '../config.js';
+import { AUTH_API_BASE, apiPath } from '../config.js';
 
-// ===== 认证与会话（HttpOnly Cookie 优先） =====
+const authPath = (path) => AUTH_API_BASE + path;
+
 export const authMethods = {
   async init() {
     document.querySelector('.modal__toolbar')?.addEventListener('mousedown', (event) => {
       if (event.target.closest('button')) event.preventDefault();
     });
 
-    // 优先使用 HttpOnly Cookie 会话（由 /auth 签发，密钥不再落 localStorage）
     try {
-      const me = await this.api('GET', apiPath('/me'));
-      if (me?.role === 'editor') {
-        if (typeof localStorage !== 'undefined') localStorage.removeItem(ACCESS_KEY_STORAGE);
+      const me = await this.api('GET', authPath('/me'));
+      if (me?.role === 'admin') {
         this.role = 'editor';
+        this.adminUsername = me.username;
         this.applyRoleUI();
         this.hideLogin();
         return this.enterApp();
       }
-    } catch (e) { /* 网络异常时按未登录处理 */ }
-
-    // 兼容旧版：localStorage 里的明文密钥换取一次 Cookie 后即删除
-    const saved = (typeof localStorage !== 'undefined') ? localStorage.getItem(ACCESS_KEY_STORAGE) : null;
-    if (saved) {
-      try {
-        const data = await this.auth(saved);
-        localStorage.removeItem(ACCESS_KEY_STORAGE);
-        this.role = data.role;
-        this.applyRoleUI();
-        this.hideLogin();
-        return this.enterApp();
-      } catch (e) {
-        localStorage.removeItem(ACCESS_KEY_STORAGE);
-      }
-    }
+    } catch {}
 
     this.role = 'viewer';
     this.applyRoleUI();
@@ -40,47 +25,45 @@ export const authMethods = {
     this.enterApp();
   },
 
-  async auth(key) {
-    const res = await fetch(apiPath('/auth'), {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key })
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok) throw new Error((data && data.error) || '编辑密码错误');
-    return data; // { role }
+  async auth(username, password) {
+    return this.api('POST', authPath('/login'), { username, password });
   },
 
   async submitLogin() {
-    const input = document.getElementById('loginKey');
-    const key = (input.value || '').trim();
-    if (!key) return;
+    const usernameInput = document.getElementById('loginUsername');
+    const passwordInput = document.getElementById('loginPassword');
+    const username = (usernameInput?.value || '').trim();
+    const password = passwordInput?.value || '';
+    if (!username || !password) {
+      this.toast('请输入管理员账号和密码');
+      return;
+    }
+
     this.showLoading(true);
     try {
-      const data = await this.auth(key); // 服务端签发 HttpOnly Cookie，本地不保存密钥
-      this.role = data.role;
+      const data = await this.auth(username, password);
+      this.role = 'editor';
+      this.adminUsername = data.username || username;
       this.hideLogin();
       this.applyRoleUI();
       this.enterApp();
-      this.toast('已以编辑模式进入');
-    } catch (e) {
-      this.toast(e.message);
-      input.value = '';
-      input.focus();
+      this.toast('已以管理员身份进入编辑模式');
+    } catch (error) {
+      this.toast(error.message || '账号或密码错误');
+      if (passwordInput) {
+        passwordInput.value = '';
+        passwordInput.focus();
+      }
     } finally {
       this.showLoading(false);
     }
   },
 
   enterViewerMode() {
-    if (typeof localStorage !== 'undefined') localStorage.removeItem(ACCESS_KEY_STORAGE);
-    this.accessKey = null;
     this.role = 'viewer';
     this.hideLogin();
     this.applyRoleUI();
     this.renderMenus();
-    // 以 viewer 身份重新拉取数据：private 标签的笔记由服务端过滤，不能留在内存里
     this.enterApp();
   },
 
@@ -89,8 +72,7 @@ export const authMethods = {
       this.showLogin();
       return;
     }
-
-    try { await this.api('POST', apiPath('/logout')); } catch (e) { /* Cookie 清除失败不阻塞本地退出 */ }
+    try { await this.api('POST', authPath('/logout')); } catch {}
     this.enterViewerMode();
     this.toast('已退出编辑模式');
   },
@@ -111,7 +93,6 @@ export const authMethods = {
 
   async refreshFromServer(reason = 'manual') {
     if (this.role !== 'editor' && this.role !== 'viewer') return;
-    // focus 和 visibilitychange 常常同时触发，5 秒内只刷新一次
     const now = Date.now();
     if (now - this._lastServerRefreshAt < 5000) return;
     this._lastServerRefreshAt = now;
@@ -148,15 +129,17 @@ export const authMethods = {
   showLogin() {
     const el = document.getElementById('loginOverlay');
     if (el) el.classList.add('login-overlay--active');
-    const input = document.getElementById('loginKey');
+    const input = document.getElementById('loginUsername');
     if (input) setTimeout(() => input.focus(), 100);
   },
 
   hideLogin() {
     const el = document.getElementById('loginOverlay');
     if (el) el.classList.remove('login-overlay--active');
-    const input = document.getElementById('loginKey');
-    if (input) input.value = '';
+    ['loginUsername', 'loginPassword'].forEach((id) => {
+      const input = document.getElementById(id);
+      if (input) input.value = '';
+    });
   },
 
   applyRoleUI() {
@@ -165,14 +148,14 @@ export const authMethods = {
     if (newBtn) newBtn.style.display = isEditor ? '' : 'none';
     const badge = document.getElementById('roleBadge');
     if (badge) {
-      badge.textContent = isEditor ? '✏️ 编辑模式' : '👁 查看模式';
+      badge.textContent = isEditor ? `管理员${this.adminUsername ? ` · ${this.adminUsername}` : ''}` : '查看模式';
       badge.className = 'topnav__role ' + (isEditor ? 'topnav__role--editor' : 'topnav__role--viewer');
       badge.style.display = '';
     }
     const logoutBtn = document.getElementById('logoutBtn');
     if (logoutBtn) {
-      logoutBtn.textContent = isEditor ? '退出编辑' : '编辑登录';
-      logoutBtn.title = isEditor ? '退出编辑模式' : '输入编辑密码';
+      logoutBtn.textContent = isEditor ? '退出登录' : '管理员登录';
+      logoutBtn.title = isEditor ? '退出管理员登录' : '输入管理员账号和密码';
       logoutBtn.style.display = '';
     }
     const passwordBtn = document.getElementById('passwordBtn');
@@ -186,58 +169,56 @@ export const authMethods = {
   },
 
   openPasswordModal() {
-    if (this.role !== 'editor') { this.toast('需要编辑密码'); return; }
+    if (this.role !== 'editor') { this.toast('需要管理员登录'); return; }
     this.closeMobileSheets();
     const modal = document.getElementById('passwordModal');
-    const current = document.getElementById('currentPasswordKey');
-    const next = document.getElementById('newPasswordKey');
-    const confirm = document.getElementById('confirmPasswordKey');
-    if (!modal || !current || !next || !confirm) return;
-    current.value = this.accessKey || '';
-    next.value = '';
-    confirm.value = '';
+    if (!modal) return;
+    ['currentPasswordKey', 'newPasswordKey', 'confirmPasswordKey'].forEach((id) => {
+      const input = document.getElementById(id);
+      if (input) input.value = '';
+    });
     modal.classList.add('modal-overlay--active');
-    setTimeout(() => (current.value ? next : current).focus(), 100);
+    setTimeout(() => document.getElementById('currentPasswordKey')?.focus(), 100);
   },
 
   closePasswordModal() {
     const modal = document.getElementById('passwordModal');
     if (modal) modal.classList.remove('modal-overlay--active');
-    ['currentPasswordKey', 'newPasswordKey', 'confirmPasswordKey'].forEach(id => {
+    ['currentPasswordKey', 'newPasswordKey', 'confirmPasswordKey'].forEach((id) => {
       const input = document.getElementById(id);
       if (input) input.value = '';
     });
   },
 
   openShortcutModal() {
-    const modal = document.getElementById('shortcutModal');
-    if (modal) modal.classList.add('modal-overlay--active');
+    document.getElementById('shortcutModal')?.classList.add('modal-overlay--active');
   },
 
   closeShortcutModal() {
-    const modal = document.getElementById('shortcutModal');
-    if (modal) modal.classList.remove('modal-overlay--active');
+    document.getElementById('shortcutModal')?.classList.remove('modal-overlay--active');
   },
 
   async changePassword() {
-    if (this.role !== 'editor') { this.toast('需要编辑密码'); return; }
-    const current = document.getElementById('currentPasswordKey')?.value.trim() || '';
-    const next = document.getElementById('newPasswordKey')?.value.trim() || '';
-    const confirm = document.getElementById('confirmPasswordKey')?.value.trim() || '';
-    if (!/^\d{6}$/.test(current)) { this.toast('请输入当前 6 位密码'); return; }
-    if (!/^\d{6}$/.test(next)) { this.toast('新密码必须是 6 位数字'); return; }
-    if (next !== confirm) { this.toast('两次输入的新密码不一致'); return; }
-    if (current === next) { this.toast('新密码不能和当前密码相同'); return; }
+    if (this.role !== 'editor') { this.toast('需要管理员登录'); return; }
+    const currentPassword = document.getElementById('currentPasswordKey')?.value || '';
+    const newPassword = document.getElementById('newPasswordKey')?.value || '';
+    const confirmPassword = document.getElementById('confirmPasswordKey')?.value || '';
+    if (newPassword.length < 8 || newPassword.length > 128) {
+      this.toast('新密码需要 8 到 128 位');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      this.toast('两次输入的新密码不一致');
+      return;
+    }
 
     this.showLoading(true);
     try {
-      await this.api('PUT', apiPath('/password'), { currentKey: current, newKey: next });
-      // 改密后服务端会清除旧 Cookie，用新密码重新换取会话
-      await this.auth(next);
+      await this.api('PUT', authPath('/password'), { currentPassword, newPassword });
       this.closePasswordModal();
-      this.toast('编辑密码已更新');
-    } catch (e) {
-      this.toast(e.message);
+      this.toast('密码已更新，其他设备需要重新登录');
+    } catch (error) {
+      this.toast(error.message);
     } finally {
       this.showLoading(false);
     }

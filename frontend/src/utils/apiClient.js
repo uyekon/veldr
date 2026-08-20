@@ -42,7 +42,7 @@ const apiFetch = async (input, options = {}) => {
 const parseApiResponse = async (response) => {
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Network error' }));
-    throw new Error(error.message || `HTTP ${response.status}`);
+    throw new Error(error.error || error.message || `HTTP ${response.status}`);
   }
   return response.json();
 };

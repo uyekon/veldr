@@ -1,89 +1,52 @@
 import { ref } from 'vue';
 import { apiFetch, parseApiResponse, clearLocalAuthState } from '@/utils/apiClient.js';
 
-const API_BASE = '/api';
-const STORAGE_KEYS = {
-  AUTHENTICATED: 'cms_authenticated',
-};
-
-// Module-level singleton state: every component sees the same auth ref, and the
-// window listeners are registered exactly once (previously each usePasswordAuth()
-// call added two listeners that were never removed).
-const isAuthenticated = ref(false);
-
-const initializeAuth = () => {
-  isAuthenticated.value = localStorage.getItem(STORAGE_KEYS.AUTHENTICATED) === 'true';
-};
-
-const handleStorageChange = (event) => {
-  if (event.key === STORAGE_KEYS.AUTHENTICATED) {
-    isAuthenticated.value = event.newValue === 'true';
-  }
-};
-
-initializeAuth();
+const STORAGE_KEY = 'cms_authenticated';
+const isAuthenticated = ref(localStorage.getItem(STORAGE_KEY) === 'true');
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('storage', handleStorageChange);
-  window.addEventListener('authStateChanged', initializeAuth);
+  window.addEventListener('storage', (event) => {
+    if (event.key === STORAGE_KEY) isAuthenticated.value = event.newValue === 'true';
+  });
+  window.addEventListener('authStateChanged', () => {
+    isAuthenticated.value = localStorage.getItem(STORAGE_KEY) === 'true';
+  });
 }
 
 export function usePasswordAuth() {
-
   const markAuthenticated = () => {
     isAuthenticated.value = true;
-    localStorage.setItem(STORAGE_KEYS.AUTHENTICATED, 'true');
-
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('authStateChanged'));
-    }
+    localStorage.setItem(STORAGE_KEY, 'true');
+    window.dispatchEvent(new CustomEvent('authStateChanged'));
   };
 
-  const verifyPassword = async (password) => {
-    try {
-      const response = await apiFetch(`${API_BASE}/password/verify`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ password }),
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        markAuthenticated();
-        return true;
-      }
-
-      return false;
-    } catch (error) {
-      console.error('Password verification error:', error);
-      return false;
-    }
-  };
-
-  const setPassword = async (password) => {
-    if (password.length !== 6 || !/^\d{6}$/.test(password)) {
-      throw new Error('Password must be 6 digits');
-    }
-
-    const response = await apiFetch(`${API_BASE}/password/update`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ password }),
+  const login = async (username, password) => {
+    const response = await apiFetch('/api/auth/login', {
+      method: 'POST',
+      skipUnauthorizedRedirect: true,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
     });
-
     const data = await parseApiResponse(response);
-    clearAuth();
+    markAuthenticated();
     return data;
   };
 
-  const getPasswordInfo = async () => {
-    const response = await apiFetch(`${API_BASE}/password/info`);
-    const data = await parseApiResponse(response);
-    return data.data;
+  const getAdminInfo = async () => {
+    const response = await apiFetch('/api/auth/me');
+    return parseApiResponse(response);
+  };
+
+  const setPassword = async (currentPassword, newPassword) => {
+    if (newPassword.length < 8 || newPassword.length > 128) {
+      throw new Error('Password must contain 8 to 128 characters');
+    }
+    const response = await apiFetch('/api/auth/password', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    return parseApiResponse(response);
   };
 
   const clearAuth = () => {
@@ -91,56 +54,17 @@ export function usePasswordAuth() {
     clearLocalAuthState();
   };
 
-  const clearAllPasswords = async () => {
-    const response = await apiFetch(`${API_BASE}/password/clear`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    const data = await parseApiResponse(response);
-    clearAuth();
-    return data;
-  };
-
-  const resetToDefault = async () => {
-    const response = await apiFetch(`${API_BASE}/password/reset`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    const data = await parseApiResponse(response);
-    clearAuth();
-    return data;
-  };
-
-  const needsVerification = () => !isAuthenticated.value;
-
   const logout = async () => {
-    try {
-      await apiFetch(`${API_BASE}/password/logout`, {
-        method: 'POST',
-      });
-    } catch (error) {
-      console.error('Logout error:', error);
-    } finally {
-      clearAuth();
-    }
+    try { await apiFetch('/api/auth/logout', { method: 'POST', skipUnauthorizedRedirect: true }); }
+    finally { clearAuth(); }
   };
 
   return {
     isAuthenticated,
-    verifyPassword,
+    login,
+    getAdminInfo,
     setPassword,
-    getPasswordInfo,
     clearAuth,
-    clearAllPasswords,
-    resetToDefault,
-    needsVerification,
     logout,
-    STORAGE_KEYS,
   };
 }

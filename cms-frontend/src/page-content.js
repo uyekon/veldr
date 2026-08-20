@@ -51,7 +51,7 @@ DELETE /api/cms/menus/:id     # 删除菜单</code></pre>
 <pre><code>POST /api/cms/upload
 Content-Type: multipart/form-data
 
-# 表单字段 image：图片文件（png/jpg/gif/webp/svg/avif/bmp，≤ 5MB）
+# 表单字段 image：图片文件（png/jpg/gif/webp/svg/avif/bmp，≤ 20MB）
 # 返回 { "url": "/uploads/cms/xxx.png", "name": "原文件名" }</code></pre>
 <p>上传成功后，在笔记正文中使用 <code>![图片说明](/uploads/cms/xxx.png)</code> 引用即可（编辑框的「插入图片」按钮会自动完成这一步）。</p>
 

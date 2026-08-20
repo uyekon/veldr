@@ -49,6 +49,15 @@ export const syncDatabases = async () => {
     console.log('✅ 主数据库模型同步完成');
     
     await databases.security.sync({ alter: config.nodeEnv !== 'production' });
+    const queryInterface = databases.security.getQueryInterface();
+    const passwordColumns = await queryInterface.describeTable('passwords');
+    if (!passwordColumns.sessionVersion) {
+      await queryInterface.addColumn('passwords', 'sessionVersion', {
+        type: 'INTEGER',
+        allowNull: false,
+        defaultValue: 1,
+      });
+    }
     console.log('✅ 安全数据库模型同步完成');
     
     return true;

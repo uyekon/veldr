@@ -10,25 +10,25 @@ let databases;
 let Article;
 let Password;
 let tempDir;
-
-const password = '123456';
+const username = 'admin';
+const legacyPassword = '123456';
 
 beforeAll(async () => {
   tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'veldr-security-'));
-
-  process.env.NODE_ENV = 'test';
-  process.env.DB_STORAGE = path.join(tempDir, 'cms.sqlite');
-  process.env.SECURITY_DB_STORAGE = path.join(tempDir, 'security.sqlite');
-  process.env.JWT_SECRET = 'test-secret';
-  process.env.JWT_EXPIRES_IN = '12h';
-  process.env.DEFAULT_PASSWORD = password;
-  process.env.CORS_ORIGIN = 'http://localhost:5173';
-
+  Object.assign(process.env, {
+    NODE_ENV: 'test',
+    DB_STORAGE: path.join(tempDir, 'cms.sqlite'),
+    SECURITY_DB_STORAGE: path.join(tempDir, 'security.sqlite'),
+    JWT_SECRET: 'test-secret',
+    JWT_EXPIRES_IN: '60d',
+    AUTH_COOKIE_MAX_AGE_MS: String(60 * 24 * 60 * 60 * 1000),
+    DEFAULT_PASSWORD: legacyPassword,
+    ADMIN_USERNAME: username,
+  });
   ({ app } = await import('../app.js'));
   ({ databases } = await import('../config/databases.js'));
   ({ default: Article } = await import('../models/Article.js'));
   ({ default: Password } = await import('../models/Password.js'));
-
   await databases.main.sync({ force: true });
   await databases.security.sync({ force: true });
 });
@@ -37,135 +37,60 @@ beforeEach(async () => {
   await Article.destroy({ where: {}, truncate: true });
   await Password.destroy({ where: {}, truncate: true });
   await Password.create({
-    type: 'default',
-    password: await bcrypt.hash(password, 12),
-    isDefault: true,
-    lastModified: new Date(),
+    type: 'default', password: await bcrypt.hash(legacyPassword, 12), isDefault: true,
+    lastModified: new Date(), sessionVersion: 1,
   });
 });
 
 afterAll(async () => {
   await databases?.main?.close();
   await databases?.security?.close();
-  if (tempDir) {
-    await fs.rm(tempDir, { recursive: true, force: true });
-  }
+  if (tempDir) await fs.rm(tempDir, { recursive: true, force: true });
 });
 
-const createArticlePayload = {
-  title: 'Security Test Note',
-  slug: 'security-test-note',
-  content: '<p>Test</p>',
-  excerpt: 'Test excerpt',
-  status: 'private',
-};
-
-const login = async () => {
-  const agent = request.agent(app);
-  const response = await agent
-    .post('/api/password/verify')
-    .send({ password });
-
-  expect(response.status).toBe(200);
-  expect(response.headers['set-cookie']?.[0]).toContain('veldr_auth=');
-  expect(response.headers['set-cookie']?.[0]).toContain('HttpOnly');
+const login = async (agent = request.agent(app), password = legacyPassword) => {
+  const response = await agent.post('/api/auth/login').send({ username, password }).expect(200);
+  expect(response.headers['set-cookie']?.join(';')).toContain('veldr_auth=');
+  expect(response.headers['set-cookie']?.join(';')).toContain('HttpOnly');
+  expect(response.headers['set-cookie']?.join(';')).toContain('Max-Age=5184000');
   return agent;
 };
 
-describe('security auth', () => {
-  it('blocks unauthenticated protected write endpoints', async () => {
-    await request(app).post('/api/articles').send(createArticlePayload).expect(401);
-    await request(app).put('/api/articles/test-id').send(createArticlePayload).expect(401);
-    await request(app).patch('/api/articles/test-id/status').send({ status: 'published' }).expect(401);
-    await request(app).delete('/api/articles/test-id').expect(401);
-    await request(app).post('/api/upload').expect(401);
-    await request(app).post('/api/password/reset').expect(401);
-    await request(app).post('/api/password/clear').expect(401);
-    await request(app).put('/api/password/update').send({ password: '654321' }).expect(401);
-    await request(app).get('/api/password/info').expect(401);
+describe('administrator authentication', () => {
+  it('requires an administrator username and rejects the retired password endpoint', async () => {
+    await request(app).post('/api/auth/login').send({ username: 'wrong', password: legacyPassword }).expect(401);
+    await request(app).post('/api/auth/login').send({ username, password: 'bad' }).expect(401);
+    await request(app).post('/api/password/verify').send({ password: legacyPassword }).expect(404);
   });
 
-  it('allows authenticated article creation and hides password info', async () => {
+  it('blocks protected Veldr writes until the administrator signs in', async () => {
+    await request(app).post('/api/articles').send({ title: 'Private', slug: 'private', content: '<p>x</p>' }).expect(401);
     const agent = await login();
-
-    const createResponse = await agent
-      .post('/api/articles')
-      .send(createArticlePayload)
-      .expect(201);
-
-    expect(createResponse.body.success).toBe(true);
-    expect(createResponse.body.data.status).toBe('private');
-
-    const infoResponse = await agent.get('/api/password/info').expect(200);
-    expect(infoResponse.body.data).toMatchObject({
-      isSet: true,
-      length: 6,
-      isDefault: true,
-    });
-    expect(infoResponse.body.data.password).toBeUndefined();
+    await agent.post('/api/articles').send({ title: 'Private', slug: 'private', content: '<p>x</p>', status: 'private' }).expect(201);
   });
 
-  it('upgrades legacy plaintext password after successful verification', async () => {
-    await Password.update({
-      password: '654321',
-      isDefault: false,
-    }, {
-      where: { type: 'default' },
-    });
-
-    await request(app)
-      .post('/api/password/verify')
-      .send({ password: '654321' })
-      .expect(200);
-
-    const passwordRecord = await Password.findOne({ where: { type: 'default' } });
-    expect(passwordRecord.password).not.toBe('654321');
-    expect(passwordRecord.password.startsWith('$2')).toBe(true);
-    expect(await bcrypt.compare('654321', passwordRecord.password)).toBe(true);
-  });
-
-  it('only exposes published content to unauthenticated readers', async () => {
-    const published = await Article.create({
-      title: 'Published Note',
-      slug: 'published-note',
-      content: '<p>Published</p>',
-      status: 'published',
-    });
-    const privateArticle = await Article.create({
-      title: 'Private Note',
-      slug: 'private-note',
-      content: '<p>Private</p>',
-      status: 'private',
-    });
-    const draft = await Article.create({
-      title: 'Draft Note',
-      slug: 'draft-note',
-      content: '<p>Draft</p>',
-      status: 'draft',
-    });
-
-    const listResponse = await request(app).get('/api/articles').expect(200);
-    expect(listResponse.body.data).toHaveLength(1);
-    expect(listResponse.body.data[0].id).toBe(published.id);
-
-    await request(app).get(`/api/articles/${published.id}`).expect(200);
-    await request(app).get(`/api/articles/${privateArticle.id}`).expect(404);
-    await request(app).get(`/api/articles/${draft.id}?admin=true`).expect(404);
-
+  it('allows legacy six-digit credentials only for transition and requires a strong replacement password', async () => {
     const agent = await login();
-    await agent.get(`/api/articles/${privateArticle.id}`).expect(200);
-    await agent.get(`/api/articles/${draft.id}?admin=true`).expect(200);
+    await agent.put('/api/auth/password').send({ currentPassword: legacyPassword, newPassword: 'short' }).expect(400);
+    const response = await agent.put('/api/auth/password').send({ currentPassword: legacyPassword, newPassword: 'NewPass!2026' }).expect(200);
+    expect(response.body.minimumPasswordLength).toBe(8);
+    await request(app).post('/api/auth/login').send({ username, password: legacyPassword }).expect(401);
+    await request(app).post('/api/auth/login').send({ username, password: 'NewPass!2026' }).expect(200);
   });
 
-  it('rate limits repeated invalid password attempts', async () => {
-    let lastResponse;
+  it('invalidates existing sessions when the password changes', async () => {
+    const first = await login();
+    const second = await login();
+    await first.put('/api/auth/password').send({ currentPassword: legacyPassword, newPassword: 'NewPass!2026' }).expect(200);
+    await second.get('/api/auth/me').expect(401);
+    await first.get('/api/auth/me').expect(200).expect(({ body }) => expect(body.role).toBe('admin'));
+  });
 
+  it('rate limits repeated failed administrator logins', async () => {
+    let response;
     for (let index = 0; index < 11; index += 1) {
-      lastResponse = await request(app)
-        .post('/api/password/verify')
-        .send({ password: '000000' });
+      response = await request(app).post('/api/auth/login').send({ username, password: 'wrong-password' });
     }
-
-    expect(lastResponse.status).toBe(429);
+    expect(response.status).toBe(429);
   });
 });

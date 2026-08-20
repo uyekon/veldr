@@ -4,7 +4,6 @@ import { apiPath } from '../config.js';
 export const apiMethods = {
   async api(method, url, body) {
     const opts = { method, headers: {} };
-    if (this.accessKey) opts.headers['X-Access-Key'] = this.accessKey;
     if (body !== undefined) {
       opts.headers['Content-Type'] = 'application/json';
       opts.body = JSON.stringify(body);
@@ -12,7 +11,12 @@ export const apiMethods = {
     const res = await fetch(url, { credentials: 'include', ...opts });
     const data = res.status === 204 ? null : await res.json().catch(() => null);
     if (!res.ok) {
-      const error = new Error((data && data.error) || ('HTTP ' + res.status));
+      if (res.status === 401 && this.role === 'editor') {
+        this.role = 'viewer';
+        this.applyRoleUI();
+        this.showLogin();
+      }
+      const error = new Error((data && (data.error || data.message)) || ('HTTP ' + res.status));
       error.status = res.status;
       error.code = data && data.code;
       error.current = data && data.current;

@@ -9,24 +9,28 @@ if (!password) {
   process.exit(1);
 }
 
-if (!/^\d{6}$/.test(password)) {
-  console.error('Admin password must be exactly six digits.');
+if (password.length < 8 || password.length > 128) {
+  console.error('Admin password must contain 8 to 128 characters.');
   process.exit(1);
 }
 
 const db = new Database(dbPath);
 const hash = bcrypt.hashSync(password, 12);
 const now = new Date().toISOString();
+const columns = db.prepare('pragma table_info(passwords)').all();
+if (!columns.some((column) => column.name === 'sessionVersion')) {
+  db.exec('alter table passwords add column sessionVersion INTEGER NOT NULL DEFAULT 1');
+}
 const existing = db.prepare('select id from passwords where type = ?').get('default');
 
 if (existing) {
   db.prepare(
-    'update passwords set password = ?, isDefault = 1, lastModified = ?, updatedAt = ? where type = ?'
+    'update passwords set password = ?, isDefault = 0, lastModified = ?, updatedAt = ?, sessionVersion = coalesce(sessionVersion, 1) + 1 where type = ?'
   ).run(hash, now, now, 'default');
 } else {
   db.prepare(
-    'insert into passwords (type, password, isDefault, lastModified, createdAt, updatedAt) values (?, ?, ?, ?, ?, ?)'
-  ).run('default', hash, 1, now, now, now);
+    'insert into passwords (type, password, isDefault, lastModified, sessionVersion, createdAt, updatedAt) values (?, ?, ?, ?, ?, ?, ?)'
+  ).run('default', hash, 0, now, 1, now, now);
 }
 
 db.close();

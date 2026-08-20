@@ -22,8 +22,11 @@ Edit `backend\.env.prod` and set strong production values, especially:
 
 ```text
 JWT_SECRET
+ADMIN_USERNAME
 DEFAULT_PASSWORD
 ```
+
+`DEFAULT_PASSWORD` may be the existing six-digit password during migration, but the first password change must use 8-128 characters. Set `JWT_EXPIRES_IN=60d` and `AUTH_COOKIE_MAX_AGE_MS=5184000000` for the long-lived administrator session.
 
 Deploy backend:
 
@@ -54,11 +57,13 @@ powershell -ExecutionPolicy Bypass -File .\scripts\deploy-frontends.ps1 -Deploy 
 
 ## Nginx
 
-Deploy both nginx configs (site + SNI stream router) with:
+Deploy the Veldr HTTP nginx config with:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\deploy-nginx.ps1 -SshKey "C:\Users\indep\.ssh\id_ed25519"
 ```
+
+The shared 443 SNI map also routes `nav`, `gotify`, `igotify`, and `ws`; it is not touched by normal Veldr releases. Only use `-ReplaceSharedStream` after updating the complete shared map in `deploy/nginx/veldr-stream.conf` and intentionally reviewing every mapped service.
 
 Config files:
 

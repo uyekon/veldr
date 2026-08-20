@@ -1,29 +1,231 @@
+import { Editor, Node, mergeAttributes } from '@tiptap/core';
+import StarterKit from '@tiptap/starter-kit';
+import { Markdown } from '@tiptap/markdown';
+import Image from '@tiptap/extension-image';
+import FileHandler from '@tiptap/extension-file-handler';
+import Placeholder from '@tiptap/extension-placeholder';
+import { TableKit } from '@tiptap/extension-table';
+import TaskList from '@tiptap/extension-task-list';
+import TaskItem from '@tiptap/extension-task-item';
 import { apiPath } from '../config.js';
+import {
+  IMAGE_WIDTHS,
+  MAX_GALLERY_COLUMNS,
+  MIN_GALLERY_COLUMNS,
+  normalizeMarkdownForEditor,
+  normalizeMarkdownStructure,
+  normalizeImageWidths,
+} from '../markdown-utils.js';
+import {
+  createDraftRecord,
+  isDraftNewerThanNote,
+  loadDraft,
+  removeDraft,
+  saveDraft,
+} from './drafts.js';
 
-// ===== 笔记编辑器：弹窗、保存、自动保存、冲突处理、Markdown 工具、上传 =====
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+const MAX_IMAGE_LABEL = '20 MB';
+const ALLOWED_IMAGE_TYPES = /^image\/(png|jpe?g|gif|webp|svg\+xml|avif|bmp)$/i;
+
+function imageAltText(name) {
+  return String(name || 'image').replace(/[\[\]\n\r]/g, ' ').trim() || 'image';
+}
+
+function imageMarkdown(attrs) {
+  const alt = imageAltText(attrs.alt);
+  const src = String(attrs.src || attrs.url || '');
+  const widthPercent = String(attrs.widthPercent || '').replace(/%$/, '');
+  const width = String(attrs.width || '').replace(/%$/, '');
+  const title = attrs.title ? ` "${String(attrs.title).replace(/"/g, '\\"')}"` : '';
+  const base = `![${alt}](${src}${title})`;
+  if (/^\d+$/.test(width)) return `${base}{width=${width}px}`;
+  if (IMAGE_WIDTHS.has(widthPercent)) return `${base}{width=${widthPercent}%}`;
+  return base;
+}
+
+const VeldrImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      widthPercent: {
+        default: null,
+        parseHTML: (element) => element.getAttribute('data-width-percent'),
+        renderHTML: (attributes) => attributes.widthPercent ? { 'data-width-percent': attributes.widthPercent } : {},
+      },
+    };
+  },
+  parseMarkdown(token, helpers) {
+    const encodedTitle = String(token.title || '');
+    const widthMatch = encodedTitle.match(/^veldr-width=(\d+)(%|px)$/);
+    return helpers.createNode('image', {
+      src: token.href,
+      alt: token.text || null,
+      title: widthMatch ? null : (token.title || null),
+      width: widthMatch?.[2] === 'px' ? Number(widthMatch[1]) : null,
+      widthPercent: widthMatch?.[2] === '%' ? Number(widthMatch[1]) : null,
+    });
+  },
+  renderMarkdown(node) {
+    return imageMarkdown(node.attrs || {});
+  },
+}).configure({
+  resize: {
+    enabled: true,
+    directions: ['left', 'right', 'top-left', 'top-right', 'bottom-left', 'bottom-right'],
+    minWidth: 80,
+    minHeight: 50,
+    alwaysPreserveAspectRatio: true,
+  },
+});
+
+const ImageGallery = Node.create({
+  name: 'imageGallery',
+  group: 'block',
+  content: 'image+',
+  isolating: true,
+  draggable: true,
+  addAttributes() {
+    return { columns: { default: 2 } };
+  },
+  parseHTML() {
+    return [{ tag: 'div[data-veldr-image-gallery]' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    const columns = Math.min(MAX_GALLERY_COLUMNS, Math.max(MIN_GALLERY_COLUMNS, Number(HTMLAttributes.columns) || MIN_GALLERY_COLUMNS));
+    return ['div', mergeAttributes(HTMLAttributes, {
+      'data-veldr-image-gallery': '',
+      class: 'tiptap-image-gallery',
+      style: `--gallery-columns:${columns}`,
+    }), 0];
+  },
+  renderMarkdown(node, helpers) {
+    const columns = Math.min(MAX_GALLERY_COLUMNS, Math.max(MIN_GALLERY_COLUMNS, Number(node.attrs?.columns) || MIN_GALLERY_COLUMNS));
+    return `:::images{columns=${columns}}\n${helpers.renderChildren(node.content || [], '\n')}\n:::\n\n`;
+  },
+});
+
+const VeldrVideo = Node.create({
+  name: 'video',
+  group: 'block',
+  atom: true,
+  draggable: true,
+  addAttributes() {
+    return {
+      src: { default: null },
+      poster: { default: null },
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'video[src]' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['video', mergeAttributes({ controls: 'controls', preload: 'metadata' }, HTMLAttributes)];
+  },
+  renderMarkdown(node) {
+    const src = String(node.attrs?.src || '').replace(/"/g, '&quot;');
+    const poster = node.attrs?.poster ? ` poster="${String(node.attrs.poster).replace(/"/g, '&quot;')}"` : '';
+    return `<video controls preload="metadata"${poster} src="${src}"></video>`;
+  },
+});
+
+function galleryImages(markdown) {
+  const images = [];
+  const matcher = /!\[([^\]]*)\]\(([^\s)]+)(?:\s+"([^"]*)")?\)(?:\{width=(\d+)(?:%|px)?\})?/g;
+  let match;
+  while ((match = matcher.exec(markdown))) {
+    const encodedWidth = String(match[3] || '').match(/^veldr-width=(\d+)(%|px)$/);
+    images.push({
+      type: 'image',
+      attrs: {
+        alt: match[1] || null,
+        src: match[2],
+        title: encodedWidth ? null : (match[3] || null),
+        width: match[4] ? Number(match[4]) : (encodedWidth?.[2] === 'px' ? Number(encodedWidth[1]) : null),
+        widthPercent: encodedWidth?.[2] === '%' ? Number(encodedWidth[1]) : null,
+      },
+    });
+  }
+  return images;
+}
+
+function parseLegacyMarkdown(editor, markdown) {
+  const galleries = [];
+  const videos = [];
+  let source = normalizeMarkdownForEditor(markdown).replace(
+    /^:::images\{columns=(2|3|4)\}\s*$([\s\S]*?)^:::\s*$/gm,
+    (_, columns, body) => {
+      const token = `VELDR_GALLERY_${galleries.length}_TOKEN`;
+      galleries.push({ columns: Number(columns), images: galleryImages(body) });
+      return `\n\n${token}\n\n`;
+    },
+  );
+  source = source.replace(/<video\b([^>]*)><\/video>/gi, (_match, attributes) => {
+    const src = String(attributes.match(/\bsrc=["']([^"']+)["']/i)?.[1] || '');
+    if (!src) return '';
+    const poster = String(attributes.match(/\bposter=["']([^"']+)["']/i)?.[1] || '');
+    const token = `VELDR_VIDEO_${videos.length}_TOKEN`;
+    videos.push({ src, poster });
+    return `\n\n${token}\n\n`;
+  });
+  const content = editor.markdown.parse(source);
+
+  const replaceTokens = (node) => {
+    if (!node?.content) return node;
+    const children = node.content.map(replaceTokens);
+    if (node.type === 'paragraph' && children.length === 1 && children[0]?.type === 'text') {
+      const match = String(children[0].text || '').match(/^VELDR_GALLERY_(\d+)_TOKEN$/);
+      if (match) {
+        const gallery = galleries[Number(match[1])];
+        if (gallery?.images.length) return { type: 'imageGallery', attrs: { columns: gallery.columns }, content: gallery.images };
+      }
+      const videoMatch = String(children[0].text || '').match(/^VELDR_VIDEO_(\d+)_TOKEN$/);
+      if (videoMatch) {
+        const video = videos[Number(videoMatch[1])];
+        if (video?.src) return { type: 'video', attrs: video };
+      }
+    }
+    return { ...node, content: children };
+  };
+
+  return replaceTokens(content);
+}
+
+function getUploadErrorMessage(response, data, fallback) {
+  if (response.status === 413 || data?.code === 'FILE_TOO_LARGE') return `图片超过 ${MAX_IMAGE_LABEL}，无法上传`;
+  if (response.status === 401 || response.status === 403) return '编辑登录已失效，请重新登录';
+  if (response.status === 415) return '不支持的图片格式';
+  return data?.error || data?.message || fallback || `图片上传失败（HTTP ${response.status}）`;
+}
+
 export const editorMethods = {
-  openNoteModal(editId) {
-    if (this.role !== 'editor') { this.toast('查看模式下无法编辑，请输入编辑密码'); return; }
+  async openNoteModal(editId) {
+    if (this.role !== 'editor') {
+      this.toast('查看模式下不能编辑，请先登录管理员账号');
+      return;
+    }
+
     this.editingNoteId = editId || null;
     this.editingNoteVersion = null;
     const modal = document.getElementById('noteModal');
     const titleEl = document.getElementById('noteTitle');
     const categoryEl = document.getElementById('noteCategory');
     const tagsEl = document.getElementById('noteTags');
-    const contentEl = document.getElementById('noteContent');
     const deleteBtn = document.getElementById('modalDeleteBtn');
+    let content = '';
+    let existingNote = null;
 
     if (editId) {
-      const note = this._notes.find(n => n.id === editId);
-      if (!note) return;
+      existingNote = this._notes.find((item) => item.id === editId);
+      if (!existingNote) return;
       document.getElementById('modalTitle').textContent = '编辑笔记';
       document.getElementById('modalSaveBtn').textContent = '更新笔记';
-      titleEl.value = note.title;
-      this.ensureCategoryOptions(note.category);
-      categoryEl.value = note.category;
-      tagsEl.value = (note.tags || []).join(', ');
-      contentEl.value = note.content;
-      this.editingNoteVersion = Number(note.version) || 1;
+      titleEl.value = existingNote.title;
+      this.ensureCategoryOptions(existingNote.category);
+      categoryEl.value = existingNote.category;
+      tagsEl.value = (existingNote.tags || []).join(', ');
+      content = existingNote.content || '';
+      this.editingNoteVersion = Number(existingNote.version) || 1;
       deleteBtn.style.display = '';
     } else {
       document.getElementById('modalTitle').textContent = '新建笔记';
@@ -32,239 +234,317 @@ export const editorMethods = {
       this.ensureCategoryOptions(this.getDefaultCategoryId());
       categoryEl.value = this.getDefaultCategoryId();
       tagsEl.value = '';
-      contentEl.value = '';
-      this.editingNoteVersion = null;
       deleteBtn.style.display = 'none';
     }
+    this.draftNotebookId = existingNote?.notebookId ?? this.getCurrentNotebookId();
+
     modal.classList.add('modal-overlay--active');
     this.autosaveDirty = false;
     this.conflictPending = false;
-    // 每次打开笔记默认使用“预览编辑”：左侧编辑源码，右侧实时预览。
-    // 移动端也保持同一默认模式，用户可手动切换到源码或只读预览。
-    this.setEditorMode('split');
     this.suppressAutosave = true;
+    this.setEditorMarkdown(content);
+    this.setEditorMode('write');
     this.updateMarkdownPreview(true);
     this.suppressAutosave = false;
-    this.setAutosaveStatus(this.editingNoteId ? `服务器版本 v${this.editingNoteVersion || 1}` : '新笔记尚未保存');
+    const restoredDraft = await this.restoreEditorDraft(existingNote);
+    if (!restoredDraft) this.setAutosaveStatus(this.editingNoteId ? `服务器版本 v${this.editingNoteVersion || 1}` : '新笔记尚未保存');
     setTimeout(() => titleEl.focus(), 100);
   },
 
-  async saveNote(options = {}) {
-    if (this.role !== 'editor') { this.toast('需要编辑密码'); return; }
-    const keepOpen = Boolean(options.keepOpen);
-    const title = document.getElementById('noteTitle').value.trim();
-    const content = document.getElementById('noteContent').value.trim();
-    if (!title) { alert('请输入笔记标题'); return; }
-    if (!content) { alert('请输入笔记内容'); return; }
+  ensureRichEditor() {
+    if (this.richEditor) return this.richEditor;
+    const host = document.getElementById('noteContentHost');
+    if (!host) return null;
 
+    const receiveFiles = (files, position) => {
+      const layout = this.getSelectedImageLayout();
+      this.uploadImageFiles(files, {
+        mode: files.length > 1 ? 'gallery' : layout.mode,
+        columns: layout.columns,
+        position,
+      });
+    };
+
+    this.richEditor = new Editor({
+      element: host,
+      extensions: [
+        StarterKit.configure({ link: { openOnClick: false } }),
+        Markdown.configure({ markedOptions: { gfm: true, breaks: true } }),
+        VeldrImage,
+        ImageGallery,
+        VeldrVideo,
+        Placeholder.configure({ placeholder: '在此编写笔记内容，支持 Markdown 快捷输入…' }),
+        FileHandler.configure({
+          allowedMimeTypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml', 'image/avif', 'image/bmp'],
+          consumePasteEvent: true,
+          onPaste: (_editor, files) => receiveFiles(files),
+          onDrop: (_editor, files, position) => receiveFiles(files, position),
+        }),
+        TableKit.configure({ table: { resizable: true } }),
+        TaskList,
+        TaskItem.configure({ nested: true }),
+      ],
+      editorProps: {
+        attributes: { class: 'tiptap' },
+        handleKeyDown: (_view, event) => this.handleEditorKeydown(event),
+        handleClickOn: (_view, _position, node, nodePosition) => {
+          if (node.type.name !== 'image' || !this.richEditor) return false;
+          this.richEditor.chain().focus().setNodeSelection(nodePosition).run();
+          return true;
+        },
+        handleDOMEvents: {
+          click: (view, event) => {
+            if (!(event.target instanceof Element) || !event.target.closest('img')) return false;
+            const hit = view.posAtCoords({ left: event.clientX, top: event.clientY });
+            const candidates = [hit?.pos, hit?.pos && hit.pos - 1].filter(Number.isInteger);
+            const imagePosition = candidates.find((position) => view.state.doc.nodeAt(position)?.type.name === 'image');
+            if (!Number.isInteger(imagePosition) || !this.richEditor) return false;
+            this.richEditor.chain().focus().setNodeSelection(imagePosition).run();
+            event.preventDefault();
+            return true;
+          },
+        },
+      },
+      onUpdate: () => {
+        this.clearPercentWidthAfterResize();
+        this.updateMarkdownPreview();
+      },
+    });
+    return this.richEditor;
+  },
+
+  getEditorMarkdown() {
+    const source = document.getElementById('noteContent');
+    if (this.currentEditorMode === 'source' && source) return normalizeMarkdownStructure(source.value);
+    return normalizeMarkdownStructure(this.richEditor?.getMarkdown?.() || '');
+  },
+
+  clearPercentWidthAfterResize() {
+    const editor = this.richEditor;
+    if (!editor) return;
+    const changes = [];
+    editor.state.doc.descendants((node, position) => {
+      if (node.type.name === 'image' && node.attrs.width && node.attrs.widthPercent) changes.push({ node, position });
+    });
+    if (!changes.length) return;
+    editor.commands.command(({ tr }) => {
+      changes.forEach(({ node, position }) => tr.setNodeMarkup(position, undefined, { ...node.attrs, widthPercent: null }));
+      return true;
+    });
+  },
+
+  setEditorMarkdown(markdown) {
+    const editor = this.ensureRichEditor();
+    if (!editor) return;
+    const source = normalizeMarkdownStructure(normalizeImageWidths(markdown));
+    const sourceEl = document.getElementById('noteContent');
+    if (sourceEl) sourceEl.value = source;
+    editor.commands.setContent(parseLegacyMarkdown(editor, source), { emitUpdate: false });
+  },
+
+  getEditorDraft() {
+    const tagsRaw = document.getElementById('noteTags')?.value.trim() || '';
+    return createDraftRecord({
+      noteId: this.editingNoteId,
+      title: document.getElementById('noteTitle')?.value,
+      category: document.getElementById('noteCategory')?.value,
+      tags: tagsRaw ? tagsRaw.split(',').map((tag) => tag.trim()).filter(Boolean) : [],
+      content: this.getEditorMarkdown(),
+      notebookId: this.draftNotebookId,
+      serverVersion: this.editingNoteVersion,
+      serverUpdatedAt: this._notes.find((note) => note.id === this.editingNoteId)?.updatedAt || null,
+    });
+  },
+
+  scheduleDraftSave() {
+    if (this.role !== 'editor' || this.suppressAutosave) return;
+    clearTimeout(this.draftSaveTimer);
+    this.draftSaveTimer = setTimeout(() => {
+      const draft = this.getEditorDraft();
+      if (!draft.title && !draft.content) return;
+      saveDraft(draft).catch(() => {});
+    }, 500);
+  },
+
+  async clearEditorDraft(noteId = this.editingNoteId) {
+    clearTimeout(this.draftSaveTimer);
+    this.draftSaveTimer = null;
+    await removeDraft(noteId).catch(() => {});
+  },
+
+  async restoreEditorDraft(note) {
+    const draft = await loadDraft(note?.id).catch(() => null);
+    if (!draft || !isDraftNewerThanNote(draft, note)) return false;
+
+    const message = note
+      ? '检测到此笔记有较新的本地草稿。是否恢复草稿？'
+      : '检测到未保存的新笔记草稿。是否恢复？';
+    if (!confirm(message)) {
+      await removeDraft(note?.id).catch(() => {});
+      return false;
+    }
+
+    this.suppressAutosave = true;
+    document.getElementById('noteTitle').value = draft.title;
+    this.ensureCategoryOptions(draft.category || this.getDefaultCategoryId());
+    document.getElementById('noteCategory').value = draft.category || this.getDefaultCategoryId();
+    document.getElementById('noteTags').value = (draft.tags || []).join(', ');
+    this.draftNotebookId = draft.notebookId ?? this.draftNotebookId;
+    this.setEditorMarkdown(draft.content);
+    this.setEditorMode('write');
+    this.suppressAutosave = false;
+    this.autosaveDirty = true;
+    this.setAutosaveStatus('已恢复本地草稿，等待保存');
+    return true;
+  },
+
+  async saveNote(options = {}) {
+    if (this.role !== 'editor') return;
+    const title = document.getElementById('noteTitle').value.trim();
+    if (!title) return alert('请输入笔记标题');
+    if (!this.getEditorMarkdown().trim()) return alert('请输入笔记内容');
+
+    const draftNoteId = this.editingNoteId;
     const payload = this.getNoteFormPayload();
     if (this.editingNoteId && this.editingNoteVersion) payload.version = this.editingNoteVersion;
-
     this.showLoading(true);
     try {
       if (this.editingNoteId) {
-        const updated = await this.api('PUT', apiPath('/notes/' + this.editingNoteId), payload);
+        const updated = await this.api('PUT', apiPath(`/notes/${this.editingNoteId}`), payload);
         this.editingNoteVersion = Number(updated.version) || this.editingNoteVersion;
-        this.autosaveDirty = false;
         this.setAutosaveStatus(`已保存 v${this.editingNoteVersion}`);
-        this.toast('笔记已更新');
       } else {
         const created = await this.api('POST', apiPath('/notes'), payload);
         this.editingNoteId = created.id;
-        this.editingNoteVersion = Number(created.version) || null;
+        this.editingNoteVersion = Number(created.version) || 1;
         document.getElementById('modalTitle').textContent = '编辑笔记';
         document.getElementById('modalSaveBtn').textContent = '更新笔记';
         document.getElementById('modalDeleteBtn').style.display = '';
-        this.autosaveDirty = false;
-        this.setAutosaveStatus(`已保存 v${this.editingNoteVersion || 1}`);
-        this.toast('笔记已创建');
+        this.setAutosaveStatus(`已保存 v${this.editingNoteVersion}`);
       }
+      this.autosaveDirty = false;
+      await this.clearEditorDraft(draftNoteId);
       await this.reloadNotes();
       this.updateCounts();
       this.renderTags();
-      if (!keepOpen) {
-        this.closeModal({ force: true });
-        this.showBrowse(); // showBrowse 内部会 renderNotes
-      } else {
-        this.renderNotes();
-      }
-    } catch (e) {
-      if (e.code === 'VERSION_CONFLICT' || e.status === 409) {
-        this.handleVersionConflict(e.current);
-        return;
-      }
-      this.toast(e.message);
-    } finally {
-      this.showLoading(false);
-    }
+      if (options.keepOpen) this.renderNotes();
+      else { this.closeModal({ force: true }); this.showBrowse(); }
+      this.toast('笔记已保存');
+    } catch (error) {
+      if (error.code === 'VERSION_CONFLICT' || error.status === 409) return this.handleVersionConflict(error.current);
+      this.toast(error.message);
+    } finally { this.showLoading(false); }
   },
 
   async deleteNote() {
-    if (this.role !== 'editor') { this.toast('需要编辑密码'); return; }
-    if (!this.editingNoteId) return;
-    if (!confirm('确定要删除这篇笔记吗？此操作不可撤销。')) return;
+    if (!this.editingNoteId || !confirm('确定要删除这篇笔记吗？此操作不可撤销。')) return;
     this.showLoading(true);
     try {
-      await this.api('DELETE', apiPath('/notes/' + this.editingNoteId));
-      await this.reloadNotes();
-      this.updateCounts();
-      this.renderTags();
-      this.closeModal({ force: true });
-      this.showBrowse();
-      this.toast('笔记已删除');
-    } catch (e) {
-      this.toast(e.message);
-    } finally {
-      this.showLoading(false);
-    }
+      await this.api('DELETE', apiPath(`/notes/${this.editingNoteId}`));
+      await this.clearEditorDraft(this.editingNoteId);
+      await this.reloadNotes(); this.updateCounts(); this.renderTags();
+      this.closeModal({ force: true }); this.showBrowse(); this.toast('笔记已删除');
+    } catch (error) { this.toast(error.message); } finally { this.showLoading(false); }
   },
 
   async deleteNoteDirect(id) {
-    if (this.role !== 'editor') { this.toast('需要编辑密码'); return; }
-    if (!confirm('确定要删除这篇笔记吗？')) return;
+    if (this.role !== 'editor' || !confirm('确定要删除这篇笔记吗？')) return;
     this.showLoading(true);
     try {
-      await this.api('DELETE', apiPath('/notes/' + id));
-      await this.reloadNotes();
-      this.updateCounts();
-      this.renderTags();
-      if (this.currentNote && this.currentNote.id === id) { this.currentNote = null; this.showBrowse(); }
-      this.renderNotes();
-      this.toast('笔记已删除');
-    } catch (e) {
-      this.toast(e.message);
-    } finally {
-      this.showLoading(false);
-    }
+      await this.api('DELETE', apiPath(`/notes/${id}`));
+      await this.clearEditorDraft(id);
+      await this.reloadNotes(); this.updateCounts(); this.renderTags();
+      if (this.currentNote?.id === id) { this.currentNote = null; this.showBrowse(); }
+      this.renderNotes(); this.toast('笔记已删除');
+    } catch (error) { this.toast(error.message); } finally { this.showLoading(false); }
   },
 
   async toggleStar(id) {
-    if (this.role !== 'editor') { this.toast('需要编辑密码'); return; }
-    const note = this._notes.find(n => n.id === id);
+    if (this.role !== 'editor') return;
+    const note = this._notes.find((item) => item.id === id);
     if (!note) return;
-    const newStar = !note.starred;
-    // 乐观更新
-    note.starred = newStar;
-    this.updateCounts();
-    if (this.currentNote && this.currentNote.id === id) this.currentNote.starred = newStar;
-    this.renderNotes();
-    try {
-      await this.api('PUT', apiPath('/notes/' + id), { starred: newStar });
-    } catch (e) {
-      note.starred = !newStar;
-      this.updateCounts();
-      this.renderNotes();
-      this.toast(e.message);
-    }
+    const starred = !note.starred;
+    note.starred = starred; this.updateCounts(); this.renderNotes();
+    try { await this.api('PUT', apiPath(`/notes/${id}`), { starred }); }
+    catch (error) { note.starred = !starred; this.updateCounts(); this.renderNotes(); this.toast(error.message); }
   },
 
   hasUnsavedEditorInput() {
     if (this.autosaveDirty) return true;
     if (this.editingNoteId) return false;
-    // 新笔记：只要写了内容就视为未保存
-    const title = document.getElementById('noteTitle')?.value.trim() || '';
-    const content = document.getElementById('noteContent')?.value.trim() || '';
-    return Boolean(title || content);
+    return Boolean(document.getElementById('noteTitle')?.value.trim() || this.getEditorMarkdown().trim());
   },
 
   closeModal(options = {}) {
-    if (!options.force && this.role === 'editor' && this.hasUnsavedEditorInput()) {
-      if (!confirm('有未保存的修改，确定要关闭吗？')) return;
+    if (!options.force && this.role === 'editor' && this.hasUnsavedEditorInput() && !confirm('有未保存的修改，确定要关闭吗？')) return;
+    if (!options.force && this.hasUnsavedEditorInput()) {
+      void saveDraft(this.getEditorDraft()).catch(() => {});
     }
     document.getElementById('noteModal').classList.remove('modal-overlay--active');
     clearTimeout(this.autosaveTimer);
-    this.autosaveTimer = null;
-    this.autosaveDirty = false;
-    this.conflictPending = false;
-    this.editingNoteId = null;
-    this.editingNoteVersion = null;
+    clearTimeout(this.draftSaveTimer);
+    this.autosaveTimer = null; this.autosaveDirty = false; this.conflictPending = false;
+    this.editingNoteId = null; this.editingNoteVersion = null; this.draftNotebookId = null;
   },
 
   setEditorMode(mode) {
-    const editor = document.getElementById('markdownEditor');
-    if (!editor) return;
-    const safeMode = ['split', 'write', 'preview'].includes(mode) ? mode : 'split';
-    this.currentEditorMode = safeMode;
-    editor.className = `markdown-editor markdown-editor--${safeMode}`;
-    const preview = document.getElementById('markdownPreview');
-    if (preview) preview.contentEditable = safeMode === 'split' ? 'true' : 'false';
-    document.querySelectorAll('.modal__view-btn').forEach(btn => {
-      btn.classList.toggle('modal__view-btn--active', btn.dataset.editorMode === safeMode);
+    const wrapper = document.getElementById('markdownEditor');
+    const editor = this.ensureRichEditor();
+    const source = document.getElementById('noteContent');
+    if (!wrapper || !editor) return;
+    const nextMode = ['write', 'source', 'preview'].includes(mode) ? mode : 'write';
+    if (this.currentEditorMode === 'source' && nextMode === 'write') this.setEditorMarkdown(source?.value || '');
+    if (nextMode === 'source' && source) source.value = editor.getMarkdown();
+    this.currentEditorMode = nextMode;
+    wrapper.className = `markdown-editor markdown-editor--${nextMode}`;
+    document.querySelectorAll('.modal__view-btn').forEach((button) => {
+      button.classList.toggle('modal__view-btn--active', button.dataset.editorMode === nextMode);
     });
-    if (safeMode !== 'write') {
-      // 切换视图只重渲染，不标记未保存
-      const previousSuppress = this.suppressAutosave;
-      this.suppressAutosave = true;
-      this.updateMarkdownPreview(true);
-      this.suppressAutosave = previousSuppress;
+    this.updateMarkdownPreview(true);
+    if (nextMode === 'source') {
+      if (source) source.scrollTop = 0;
+      const preview = document.getElementById('markdownPreview');
+      if (preview) preview.scrollTop = 0;
     }
   },
 
   cycleEditorMode() {
-    const order = ['split', 'write', 'preview'];
-    const index = Math.max(0, order.indexOf(this.currentEditorMode));
-    this.setEditorMode(order[(index + 1) % order.length]);
+    const modes = ['write', 'source', 'preview'];
+    this.setEditorMode(modes[(modes.indexOf(this.currentEditorMode) + 1) % modes.length]);
   },
+
+  handleSourceInput() { this.updateMarkdownPreview(); },
 
   updateMarkdownPreview(immediate = false) {
     this.updateMarkdownStats();
     if (!this.suppressAutosave) this.scheduleAutosave();
     clearTimeout(this._previewTimer);
-    if (immediate) {
-      this.renderPreviewNow();
-    } else {
-      // 防抖：长文逐字全量 parse + sanitize 会卡输入
-      this._previewTimer = setTimeout(() => this.renderPreviewNow(), 150);
-    }
+    if (immediate) this.renderPreviewNow();
+    else this._previewTimer = setTimeout(() => this.renderPreviewNow(), 120);
   },
 
   renderPreviewNow() {
-    if (this.currentEditorMode === 'write') return; // 预览隐藏时跳过渲染
-    const content = document.getElementById('noteContent');
     const preview = document.getElementById('markdownPreview');
-    if (!content || !preview) return;
-    preview.innerHTML = this.renderMarkdown(content.value);
-    preview.contentEditable = this.currentEditorMode === 'split' ? 'true' : 'false';
-  },
-
-  handlePreviewEdit(event) {
-    if (this.currentEditorMode !== 'split') return;
-    const source = document.getElementById('noteContent');
-    if (!source) return;
-    // 预览编辑保留可读的纯文本内容作为 Markdown 源，源码模式可继续精细调整格式。
-    source.value = event.currentTarget.innerText.replace(/\u00a0/g, ' ');
-    this.updateMarkdownStats();
-    this.scheduleAutosave();
+    if (this.currentEditorMode !== 'write' && preview) preview.innerHTML = this.renderMarkdown(this.getEditorMarkdown());
   },
 
   updateMarkdownStats() {
-    const content = document.getElementById('noteContent');
-    if (!content) return;
-    const text = content.value || '';
-    const trimmed = text.trim();
-    const wordCount = trimmed ? (trimmed.match(/[一-龥]|[A-Za-z0-9_]+/g) || []).length : 0;
+    const text = this.getEditorMarkdown();
+    const words = text.trim() ? (text.match(/[\u4e00-\u9fff]|[A-Za-z0-9_]+/g) || []).length : 0;
     const lines = text ? text.split('\n').length : 0;
-    const readTime = Math.max(1, Math.ceil(wordCount / 350));
-    const wordsEl = document.getElementById('markdownWords');
-    const linesEl = document.getElementById('markdownLines');
-    const readEl = document.getElementById('markdownReadTime');
-    const notebookEl = document.getElementById('markdownNotebook');
-    if (wordsEl) wordsEl.textContent = `${wordCount} 字`;
-    if (linesEl) linesEl.textContent = `${lines} 行`;
-    if (readEl) readEl.textContent = `${readTime} min 阅读`;
-    if (notebookEl) notebookEl.textContent = this.getCurrentNotebookLabel();
+    const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+    set('markdownWords', `${words} 字`); set('markdownLines', `${lines} 行`);
+    set('markdownReadTime', `${Math.max(1, Math.ceil(words / 350))} min 阅读`);
+    set('markdownNotebook', this.getCurrentNotebookLabel());
   },
 
-  setAutosaveStatus(text) {
-    const el = document.getElementById('markdownAutosave');
-    if (el) el.textContent = text;
-  },
+  setAutosaveStatus(text) { const el = document.getElementById('markdownAutosave'); if (el) el.textContent = text; },
 
   scheduleAutosave() {
     if (this.role !== 'editor') return;
+    this.scheduleDraftSave();
     this.autosaveDirty = true;
-    if (!this.editingNoteId) return; // 新笔记未创建前只标记脏状态，供关闭确认使用
-    if (this.conflictPending) return; // 冲突未处理时暂停自动保存，避免反复 409
+    if (!this.editingNoteId || this.conflictPending) return;
     this.setAutosaveStatus('有未保存修改');
     clearTimeout(this.autosaveTimer);
     this.autosaveTimer = setTimeout(() => this.autosaveNote(), 2500);
@@ -272,272 +552,280 @@ export const editorMethods = {
 
   async autosaveNote() {
     if (!this.editingNoteId || this.autosaveInFlight || !this.autosaveDirty) return;
-    this.autosaveInFlight = true;
-    this.setAutosaveStatus('正在自动保存...');
+    this.autosaveInFlight = true; this.setAutosaveStatus('正在自动保存...');
     try {
       const payload = this.getNoteFormPayload();
-      if (!payload.title || !payload.content) {
-        this.setAutosaveStatus('标题或内容为空，自动保存暂停');
-        return;
-      }
+      if (!payload.title || !payload.content) { this.setAutosaveStatus('标题或内容为空，自动保存暂停'); return; }
       payload.version = this.editingNoteVersion;
-      const updated = await this.api('PUT', apiPath('/notes/' + this.editingNoteId), payload);
+      const updated = await this.api('PUT', apiPath(`/notes/${this.editingNoteId}`), payload);
       this.editingNoteVersion = Number(updated.version) || this.editingNoteVersion;
       this.autosaveDirty = false;
-      const local = this._notes.find(note => note.id === updated.id);
+      const local = this._notes.find((note) => note.id === updated.id);
       if (local) Object.assign(local, updated);
       this.lastKnownNotesVersion = this.getNotesVersionFingerprint();
+      await this.clearEditorDraft(updated.id);
       this.setAutosaveStatus(`已自动保存 ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
-    } catch (e) {
-      if (e.status === 409 || e.code === 'VERSION_CONFLICT') {
-        this.setAutosaveStatus('其它设备有更新，自动保存已暂停');
-        this.handleVersionConflict(e.current);
-      } else {
-        this.setAutosaveStatus('自动保存失败');
-      }
-    } finally {
-      this.autosaveInFlight = false;
-    }
+    } catch (error) {
+      if (error.status === 409 || error.code === 'VERSION_CONFLICT') this.handleVersionConflict(error.current);
+      else this.setAutosaveStatus('自动保存失败');
+    } finally { this.autosaveInFlight = false; }
   },
 
   getNoteFormPayload() {
-    const title = document.getElementById('noteTitle').value.trim();
-    const category = document.getElementById('noteCategory').value;
     const tagsRaw = document.getElementById('noteTags').value.trim();
-    const content = document.getElementById('noteContent').value.trim();
-    const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
-    return { title, category, tags, content, notebookId: this.getCurrentNotebookId() };
+    return {
+      title: document.getElementById('noteTitle').value.trim(),
+      category: document.getElementById('noteCategory').value,
+      tags: tagsRaw ? tagsRaw.split(',').map((tag) => tag.trim()).filter(Boolean) : [],
+      content: this.getEditorMarkdown().trim(),
+      notebookId: this.draftNotebookId,
+    };
   },
 
   async handleVersionConflict(remote) {
     this.conflictPending = true;
-    if (confirm('这篇笔记在其它设备上更新过。选择“确定”重新加载服务器版本（当前编辑内容会丢弃）。')) {
-      if (remote) {
-        this.applyRemoteNoteToEditor(remote);
-      } else if (this.editingNoteId) {
-        this.applyRemoteNoteToEditor(await this.api('GET', apiPath('/notes/' + this.editingNoteId)));
-      }
-      this.conflictPending = false;
-      this.toast('已加载服务器版本');
-      return;
+    if (confirm('这篇笔记在其他设备上更新过。加载服务器版本并放弃当前编辑吗？')) {
+      if (remote) this.applyRemoteNoteToEditor(remote);
+      else if (this.editingNoteId) this.applyRemoteNoteToEditor(await this.api('GET', apiPath(`/notes/${this.editingNoteId}`)));
+      this.conflictPending = false; this.toast('已加载服务器版本'); return;
     }
-
-    // 覆盖服务器是破坏性操作，必须单独确认；取消则保留本地编辑、暂停自动保存
-    if (!confirm('要用当前编辑内容覆盖服务器版本吗？服务器上的修改将丢失。')) {
-      this.setAutosaveStatus('存在版本冲突，自动保存已暂停，请手动保存或重新打开');
-      return;
-    }
-
-    if (!this.editingNoteId) return;
+    if (!confirm('要用当前内容覆盖服务器版本吗？')) return;
     try {
       this.showLoading(true);
-      const payload = this.getNoteFormPayload();
-      payload.version = this.editingNoteVersion;
-      payload.force = true;
-      const updated = await this.api('PUT', apiPath('/notes/' + this.editingNoteId), payload);
+      const payload = this.getNoteFormPayload(); payload.version = this.editingNoteVersion; payload.force = true;
+      const updated = await this.api('PUT', apiPath(`/notes/${this.editingNoteId}`), payload);
       this.editingNoteVersion = Number(updated.version) || this.editingNoteVersion;
-      this.autosaveDirty = false;
-      this.conflictPending = false;
-      this.setAutosaveStatus('已覆盖保存');
-      await this.reloadNotes();
-      this.toast('已覆盖服务器版本');
-    } catch (e) {
-      this.toast(e.message);
-    } finally {
-      this.showLoading(false);
-    }
+      this.autosaveDirty = false; this.conflictPending = false;
+      await this.clearEditorDraft(updated.id);
+      await this.reloadNotes(); this.toast('已覆盖服务器版本');
+    } catch (error) { this.toast(error.message); } finally { this.showLoading(false); }
   },
 
   applyRemoteNoteToEditor(note) {
     if (!note) return;
-    const previousSuppress = this.suppressAutosave;
     this.suppressAutosave = true;
-    try {
-      document.getElementById('noteTitle').value = note.title || '';
-      this.ensureCategoryOptions(note.category || this.getDefaultCategoryId());
-      document.getElementById('noteCategory').value = note.category || this.getDefaultCategoryId();
-      document.getElementById('noteTags').value = (note.tags || []).join(', ');
-      document.getElementById('noteContent').value = note.content || '';
-      this.editingNoteVersion = Number(note.version) || 1;
-      this.autosaveDirty = false;
-      this.conflictPending = false;
-      this.updateMarkdownPreview(true);
-    } finally {
-      this.suppressAutosave = previousSuppress;
-    }
-    clearTimeout(this.autosaveTimer);
-    this.autosaveTimer = null;
-    this.autosaveDirty = false;
+    document.getElementById('noteTitle').value = note.title || '';
+    this.ensureCategoryOptions(note.category || this.getDefaultCategoryId());
+    document.getElementById('noteCategory').value = note.category || this.getDefaultCategoryId();
+    document.getElementById('noteTags').value = (note.tags || []).join(', ');
+    this.setEditorMarkdown(note.content || '');
+    this.draftNotebookId = note.notebookId || null;
+    this.editingNoteVersion = Number(note.version) || 1;
+    this.autosaveDirty = false; this.conflictPending = false;
+    this.suppressAutosave = false;
+    clearTimeout(this.autosaveTimer); this.autosaveTimer = null;
+    void this.clearEditorDraft(note.id);
     this.setAutosaveStatus(`服务器版本 v${this.editingNoteVersion}`);
   },
 
-  getEditorTextarea() {
-    return document.getElementById('noteContent');
-  },
-
-  replaceEditorSelection(text, selectStart, selectEnd) {
-    const ta = this.getEditorTextarea();
-    if (!ta) return;
-    const start = ta.selectionStart || 0;
-    const end = ta.selectionEnd || 0;
-    ta.value = ta.value.slice(0, start) + text + ta.value.slice(end);
-    ta.focus();
-    const nextStart = start + (selectStart ?? text.length);
-    const nextEnd = start + (selectEnd ?? text.length);
-    ta.selectionStart = nextStart;
-    ta.selectionEnd = nextEnd;
-    this.updateMarkdownPreview();
-  },
-
-  wrapEditorSelection(before, after, placeholder) {
-    const ta = this.getEditorTextarea();
-    if (!ta) return;
-    const start = ta.selectionStart || 0;
-    const end = ta.selectionEnd || 0;
-    const selected = ta.value.slice(start, end) || placeholder;
-    const text = before + selected + after;
-    this.replaceEditorSelection(text, before.length, before.length + selected.length);
-  },
-
-  prefixEditorLines(prefix, fallback) {
-    const ta = this.getEditorTextarea();
-    if (!ta) return;
-    const start = ta.selectionStart || 0;
-    const end = ta.selectionEnd || 0;
-    const selected = ta.value.slice(start, end) || fallback;
-    const lines = selected.split('\n');
-    const text = lines.map((line, index) => (
-      typeof prefix === 'function' ? prefix(line, index) : prefix + line
-    )).join('\n');
-    this.replaceEditorSelection(text, 0, text.length);
-  },
-
   applyMarkdownFormat(type) {
-    const ta = this.getEditorTextarea();
-    if (!ta) return;
-    const selected = ta.value.slice(ta.selectionStart || 0, ta.selectionEnd || 0);
-    const actions = {
-      h1: () => this.prefixEditorLines('# ', '标题'),
-      h2: () => this.prefixEditorLines('## ', '标题'),
-      h3: () => this.prefixEditorLines('### ', '标题'),
-      bold: () => this.wrapEditorSelection('**', '**', '粗体文本'),
-      italic: () => this.wrapEditorSelection('*', '*', '斜体文本'),
-      quote: () => this.prefixEditorLines('> ', '引用内容'),
-      ul: () => this.prefixEditorLines('- ', '列表项'),
-      ol: () => this.prefixEditorLines((line, index) => `${index + 1}. ${line}`, '列表项'),
-      task: () => this.prefixEditorLines('- [ ] ', '待办事项'),
-      inlineCode: () => this.wrapEditorSelection('`', '`', 'code'),
-      codeBlock: () => this.replaceEditorSelection(`\`\`\`\n${selected || 'code'}\n\`\`\``, 4, 4 + (selected || 'code').length),
-      table: () => this.replaceEditorSelection('| Name | Value |\n| --- | --- |\n| Item | Detail |'),
-      link: () => this.wrapEditorSelection('[', '](https://example.com)', selected || '链接文本'),
-    };
-    if (actions[type]) actions[type]();
+    const editor = this.ensureRichEditor();
+    if (!editor || this.currentEditorMode === 'source') return;
+    const chain = editor.chain().focus();
+    const heading = { h1: 1, h2: 2, h3: 3 }[type];
+    if (heading) chain.toggleHeading({ level: heading }).run();
+    else if (type === 'bold') chain.toggleBold().run();
+    else if (type === 'italic') chain.toggleItalic().run();
+    else if (type === 'quote') chain.toggleBlockquote().run();
+    else if (type === 'ul') chain.toggleBulletList().run();
+    else if (type === 'ol') chain.toggleOrderedList().run();
+    else if (type === 'task') chain.toggleTaskList().run();
+    else if (type === 'inlineCode') chain.toggleCode().run();
+    else if (type === 'codeBlock') chain.toggleCodeBlock().run();
+    else if (type === 'table') chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+    else if (type === 'link') {
+      const href = prompt('链接地址', 'https://');
+      if (href) chain.extendMarkRange('link').setLink({ href }).run();
+    }
   },
 
-  handleEditorKeydown(e) {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); this.saveNote({ keepOpen: true }); return; }
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); this.saveNote(); return; }
-    if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === '1') { e.preventDefault(); this.applyMarkdownFormat('h1'); return; }
-    if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === '2') { e.preventDefault(); this.applyMarkdownFormat('h2'); return; }
-    if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === '3') { e.preventDefault(); this.applyMarkdownFormat('h3'); return; }
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') { e.preventDefault(); this.applyMarkdownFormat('bold'); return; }
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i') { e.preventDefault(); this.applyMarkdownFormat('italic'); return; }
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); this.applyMarkdownFormat('link'); return; }
-    if ((e.ctrlKey || e.metaKey) && e.key === '/') { e.preventDefault(); this.openShortcutModal(); return; }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === '7') { e.preventDefault(); this.applyMarkdownFormat('ol'); return; }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === '8') { e.preventDefault(); this.applyMarkdownFormat('ul'); return; }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'c') { e.preventDefault(); this.applyMarkdownFormat('codeBlock'); return; }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'x') { e.preventDefault(); this.applyMarkdownFormat('task'); return; }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'p') { e.preventDefault(); this.cycleEditorMode(); return; }
-    if (e.key === 'Tab') { e.preventDefault(); this.indentEditorLines(!e.shiftKey); }
+  deleteSelectedImage(options = {}) {
+    const editor = this.richEditor;
+    const selection = editor?.state.selection;
+    const selectedImage = selection?.node?.type?.name === 'image';
+    if (!editor || this.currentEditorMode === 'source' || !selectedImage) {
+      if (!options.silent) this.toast('请先单击需要删除的图片，再按 Delete 或点击删除图片');
+      return false;
+    }
+
+    const parent = selection.$from.parent;
+    if (parent.type.name === 'imageGallery' && parent.childCount === 1) {
+      const galleryPosition = selection.$from.before(selection.$from.depth);
+      editor.chain().focus().setNodeSelection(galleryPosition).deleteSelection().run();
+    } else {
+      editor.chain().focus().deleteSelection().run();
+    }
+    return true;
   },
 
-  indentEditorLines(indent) {
-    const ta = this.getEditorTextarea();
-    if (!ta) return;
-    const value = ta.value;
-    const start = ta.selectionStart || 0;
-    const end = ta.selectionEnd || 0;
-    const lineStart = value.lastIndexOf('\n', start - 1) + 1;
-    const lineEndIndex = value.indexOf('\n', end);
-    const lineEnd = lineEndIndex === -1 ? value.length : lineEndIndex;
-    const block = value.slice(lineStart, lineEnd);
-    const lines = block.split('\n');
-    const next = lines.map(line => indent ? '  ' + line : line.replace(/^ {1,2}/, '')).join('\n');
-    ta.value = value.slice(0, lineStart) + next + value.slice(lineEnd);
-    ta.selectionStart = lineStart;
-    ta.selectionEnd = lineStart + next.length;
-    this.updateMarkdownPreview();
+  handleEditorKeydown(event) {
+    const primary = event.ctrlKey || event.metaKey;
+    if (!primary) {
+      if (event.key === 'Backspace' || event.key === 'Delete') {
+        if (this.deleteSelectedImage({ silent: true })) {
+          event.preventDefault();
+          return true;
+        }
+      }
+      if (event.key === 'Tab') {
+        const editor = this.richEditor;
+        const command = event.shiftKey ? editor.chain().focus().liftListItem('listItem') : editor.chain().focus().sinkListItem('listItem');
+        if (command.run()) return true;
+      }
+      return false;
+    }
+    if (event.key.toLowerCase() === 's') { event.preventDefault(); this.saveNote({ keepOpen: true }); return true; }
+    if (event.key === 'Enter') { event.preventDefault(); this.saveNote(); return true; }
+    if (event.key === '/') { event.preventDefault(); this.openShortcutModal(); return true; }
+    if (event.key.toLowerCase() === 'k') { event.preventDefault(); this.applyMarkdownFormat('link'); return true; }
+    if (event.altKey && ['1', '2', '3'].includes(event.key)) { event.preventDefault(); this.applyMarkdownFormat(`h${event.key}`); return true; }
+    if (event.shiftKey && event.key === '7') { event.preventDefault(); this.applyMarkdownFormat('ol'); return true; }
+    if (event.shiftKey && event.key === '8') { event.preventDefault(); this.applyMarkdownFormat('ul'); return true; }
+    if (event.shiftKey && event.key.toLowerCase() === 'c') { event.preventDefault(); this.applyMarkdownFormat('codeBlock'); return true; }
+    if (event.shiftKey && event.key.toLowerCase() === 'x') { event.preventDefault(); this.applyMarkdownFormat('task'); return true; }
+    if (event.shiftKey && event.key.toLowerCase() === 'p') { event.preventDefault(); this.cycleEditorMode(); return true; }
+    return false;
   },
 
-  // ===== 图片上传 =====
+  getSelectedImageLayout() {
+    const value = this.imageLayout || 'default';
+    const columns = Number(value.replace('grid-', ''));
+    return Number.isInteger(columns) && columns >= MIN_GALLERY_COLUMNS && columns <= MAX_GALLERY_COLUMNS
+      ? { mode: 'gallery', columns }
+      : { mode: 'image', columns: null };
+  },
+
+  setImageLayout(value) {
+    const allowed = new Set(['default', 'grid-2', 'grid-3', 'grid-4']);
+    this.imageLayout = allowed.has(value) ? value : 'default';
+    document.querySelectorAll('[data-action="set-image-layout"]').forEach((button) => {
+      const active = button.dataset.imageLayout === this.imageLayout;
+      button.classList.toggle('modal__image-layout-btn--active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+  },
+
   uploadImage() {
-    document.getElementById('imageInput').click();
+    const input = document.getElementById('imageInput');
+    const layout = this.getSelectedImageLayout();
+    input.dataset.insertMode = layout.mode;
+    input.dataset.galleryColumns = layout.columns || '';
+    input.click();
   },
 
-  async handleImageSelected(e) {
-    if (this.role !== 'editor') { this.toast('需要编辑密码'); e.target.value = ''; return; }
-    const file = e.target.files && e.target.files[0];
-    e.target.value = '';                       // 允许重复选择同一文件
+  uploadGallery() {
+    const input = document.getElementById('imageInput');
+    const layout = this.getSelectedImageLayout();
+    input.dataset.insertMode = 'gallery';
+    input.dataset.galleryColumns = layout.columns || MIN_GALLERY_COLUMNS;
+    input.click();
+  },
+
+  uploadVideo() { document.getElementById('videoInput')?.click(); },
+
+  async handleVideoSelected(event) {
+    if (this.role !== 'editor') { this.toast('Editor access is required'); event.target.value = ''; return; }
+    const file = event.target.files?.[0];
+    event.target.value = '';
     if (!file) return;
-    await this.uploadImageFile(file);
-  },
-
-  async uploadImageFile(file) {
-    const fd = new FormData();
-    fd.append('image', file);
+    const formData = new FormData();
+    formData.append('video', file);
     this.showLoading(true);
     try {
-      const res = await fetch(apiPath('/upload'), { method: 'POST', credentials: 'include', headers: this.accessKey ? { 'X-Access-Key': this.accessKey } : {}, body: fd });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error((data && data.error) || '上传失败');
-      this.insertMarkdownImage(file.name || data.name || 'image', data.url);
-      this.toast('图片已插入');
-    } catch (err) {
-      this.toast(err.message);
+      const response = await fetch(apiPath('/media'), { method: 'POST', credentials: 'include', body: formData });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.url) throw new Error(data?.error || 'Video upload failed');
+      if (this.currentEditorMode === 'source') {
+        const source = document.getElementById('noteContent');
+        const markup = `\n<video controls preload="metadata"${data.posterUrl ? ` poster="${data.posterUrl}"` : ''} src="${data.url}"></video>\n`;
+        source?.setRangeText(markup, source.selectionStart, source.selectionEnd, 'end');
+        this.handleSourceInput();
+      } else {
+        this.ensureRichEditor()?.chain().focus().insertContent({ type: 'video', attrs: { src: data.url, poster: data.posterUrl || null } }).run();
+      }
+      this.toast('Video uploaded and inserted');
+    } catch (error) {
+      this.toast(error.message);
     } finally {
       this.showLoading(false);
     }
   },
 
-  uploadVideo() { document.getElementById('videoInput')?.click(); },
+  validateImageFile(file) {
+    if (!file || !ALLOWED_IMAGE_TYPES.test(String(file.type || ''))) { this.toast('请选择 PNG、JPG、GIF、WebP、SVG、AVIF 或 BMP 图片'); return false; }
+    if (file.size > MAX_IMAGE_BYTES) { this.toast(`图片超过 ${MAX_IMAGE_LABEL}，无法上传`); return false; }
+    return true;
+  },
 
-  async handleVideoSelected(e) {
-    if (this.role !== 'editor') { this.toast('需要编辑密码'); e.target.value = ''; return; }
-    const file = e.target.files?.[0]; e.target.value = '';
-    if (!file) return;
-    const fd = new FormData(); fd.append('video', file);
+  setImageUploadState(active, label = '') {
+    const status = document.getElementById('imageUploadStatus');
+    const text = document.getElementById('imageUploadLabel');
+    this.imageUploadInFlight = active;
+    status?.classList.toggle('upload-status--active', active);
+    if (text) text.textContent = active ? label : '';
+    document.querySelectorAll('[data-action="upload-image"], [data-action="upload-gallery"]').forEach((button) => { button.disabled = active; });
+  },
+
+  async handleImageSelected(event) {
+    const files = Array.from(event.target.files || []); const mode = event.target.dataset.insertMode || 'image';
+    const columns = Number(event.target.dataset.galleryColumns) || null;
+    event.target.value = ''; event.target.dataset.insertMode = ''; event.target.dataset.galleryColumns = '';
+    if (files.length) await this.uploadImageFiles(files, { mode, columns });
+  },
+
+  async uploadImageFiles(files, options = {}) {
+    if (this.role !== 'editor' || this.imageUploadInFlight) return;
+    const valid = Array.from(files).filter((file) => this.validateImageFile(file));
+    if (!valid.length) return;
+    const uploaded = [];
     this.showLoading(true);
     try {
-      const res = await fetch(apiPath('/media'), { method: 'POST', credentials: 'include', headers: this.accessKey ? { 'X-Access-Key': this.accessKey } : {}, body: fd });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || '视频上传失败');
-      this.replaceEditorSelection(`\n<video controls preload="metadata" poster="${data.posterUrl || ''}" src="${data.url}"></video>\n`);
-      this.updateMarkdownPreview(); this.toast('视频已上传并插入');
-    } catch (err) { this.toast(err.message); } finally { this.showLoading(false); }
+      for (let index = 0; index < valid.length; index += 1) {
+        const file = valid[index];
+        this.setImageUploadState(true, `正在上传 ${index + 1}/${valid.length}: ${imageAltText(file.name)}`);
+        uploaded.push({ name: file.name, url: await this.uploadImageFile(file) });
+      }
+      this.insertUploadedImages(uploaded, options);
+      this.toast(uploaded.length > 1 ? `${uploaded.length} 张图片已插入` : '图片已插入');
+    } catch (error) { this.toast(error.message); }
+    finally { this.setImageUploadState(false); this.showLoading(false); }
   },
 
-  insertMarkdownImage(name, url) {
-    const safeName = String(name || 'image').replace(/[\[\]\n\r]/g, ' ').trim() || 'image';
-    const snippet = `![${safeName}](${url})`;
-    this.replaceEditorSelection(snippet);
+  async uploadImageFile(file) {
+    const formData = new FormData(); formData.append('image', file);
+    const response = await fetch(apiPath('/upload'), { method: 'POST', credentials: 'include', body: formData });
+    const contentType = response.headers.get('content-type') || '';
+    const data = contentType.includes('application/json') ? await response.json().catch(() => null) : null;
+    const fallback = data ? '' : (await response.text().catch(() => '')).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!response.ok || !data?.url) throw new Error(getUploadErrorMessage(response, data, fallback));
+    return data.url;
   },
 
-  async handleEditorPaste(e) {
-    const files = Array.from(e.clipboardData?.files || []).filter(file => file.type.startsWith('image/'));
-    if (!files.length) return;
-    e.preventDefault();
-    if (this.role !== 'editor') { this.toast('需要编辑密码'); return; }
-    for (const file of files) await this.uploadImageFile(file);
-  },
-
-  async handleEditorDrop(e) {
-    const files = Array.from(e.dataTransfer?.files || []).filter(file => file.type.startsWith('image/'));
-    if (!files.length) return;
-    e.preventDefault();
-    if (this.role !== 'editor') { this.toast('需要编辑密码'); return; }
-    const ta = this.getEditorTextarea();
-    if (ta) ta.focus();
-    for (const file of files) await this.uploadImageFile(file);
+  insertUploadedImages(images, options = {}) {
+    if (!images.length) return;
+    const useGallery = options.mode === 'gallery' && images.length > 1;
+    const galleryColumns = Math.min(MAX_GALLERY_COLUMNS, Math.max(MIN_GALLERY_COLUMNS, Number(options.columns) || MIN_GALLERY_COLUMNS));
+    if (this.currentEditorMode === 'source') {
+      const markdown = useGallery
+        ? `\n:::images{columns=${galleryColumns}}\n${images.map((image) => imageMarkdown({ ...image, widthPercent: 100 })).join('\n')}\n:::\n`
+        : images.map((image) => imageMarkdown(image)).join('\n');
+      const source = document.getElementById('noteContent');
+      const start = source.selectionStart; source.setRangeText(markdown, start, source.selectionEnd, 'end'); this.handleSourceInput(); return;
+    }
+    const nodeForImage = (image, gallery = false) => ({
+      type: 'image',
+      attrs: {
+        src: image.url || image.src,
+        alt: imageAltText(image.name || image.alt),
+        title: image.title || null,
+        ...(gallery ? { widthPercent: 100 } : {}),
+      },
+    });
+    const content = useGallery
+      ? { type: 'imageGallery', attrs: { columns: galleryColumns }, content: images.map((image) => nodeForImage(image, true)) }
+      : images.map((image) => nodeForImage(image));
+    const chain = this.richEditor.chain().focus();
+    if (Number.isInteger(options.position)) chain.insertContentAt(options.position, content).run();
+    else chain.insertContent(content).run();
   },
 };

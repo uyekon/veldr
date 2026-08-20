@@ -5,11 +5,11 @@ import fs from 'fs';
 import fsp from 'fs/promises';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import rateLimit from 'express-rate-limit';
-import { attachAuthState, clearAuthCookie } from '../../middleware/auth.js';
+import { attachAuthState } from '../../middleware/auth.js';
 import { asyncHandler } from '../../middleware/errorHandler.js';
 import { loadDB, persistDB, nextId, normalizeTags, uploadDir } from './cmsStore.js';
-import { authenticateCms, setSharedEditorPassword, verifyEditorPassword, requireEditor, requireViewer } from './cmsAuth.js';
+import { requireEditor, requireViewer } from './cmsAuth.js';
+import { cleanupUnreferencedCmsUploads, extractCmsUploadFilenames } from './cmsImages.js';
 
 const router = express.Router();
 const execFileAsync = promisify(execFile);
@@ -20,15 +20,6 @@ const send = (res, status, data) => res.status(status).json(data);
 // instead of becoming unhandled rejections (which kill the process in server.js)
 const viewer = asyncHandler(requireViewer);
 const editor = asyncHandler(requireEditor);
-
-const cmsAuthLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 10,
-  skipSuccessfulRequests: true,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many attempts. Please try again later.' },
-});
 
 const allowedImages = /^image\/(png|jpe?g|gif|webp|svg\+xml|avif|bmp)$/i;
 const allowedVideos = new Set(['video/mp4', 'video/webm', 'video/ogg']);
@@ -78,7 +69,7 @@ const upload = multer({
       cb(null, base + (ext || '.img'));
     },
   }),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (allowedImages.test(file.mimetype)) cb(null, true);
     else cb(new Error('Only image files are allowed'));
@@ -87,15 +78,13 @@ const upload = multer({
 
 const videoUpload = multer({
   storage: multer.diskStorage({
-    destination: (req, file, cb) => { fs.mkdirSync(videoUploadDir, { recursive: true }); cb(null, videoUploadDir); },
-    filename: (req, file, cb) => cb(null, `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}${path.extname(file.originalname).toLowerCase() || '.mp4'}`),
+    destination: (_req, _file, cb) => { fs.mkdirSync(videoUploadDir, { recursive: true }); cb(null, videoUploadDir); },
+    filename: (_req, file, cb) => cb(null, `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}${path.extname(file.originalname).toLowerCase() || '.mp4'}`),
   }),
   limits: { fileSize: 500 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => cb(null, allowedVideos.has(file.mimetype)),
+  fileFilter: (_req, file, cb) => cb(null, allowedVideos.has(file.mimetype)),
 });
 
-// Multer decodes multipart filenames as Latin-1 in some clients. Recover the
-// original UTF-8 filename so Chinese titles remain readable in the media API.
 const decodeUploadName = (name) => {
   const value = String(name || '');
   if (!/[\u00c0-\u00ff]/.test(value)) return value;
@@ -108,45 +97,19 @@ const decodeUploadName = (name) => {
 const probeVideo = async (filename) => {
   const { stdout } = await execFileAsync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type,width,height', '-of', 'json', filename], { maxBuffer: 1024 * 1024 });
   const data = JSON.parse(stdout);
-  const stream = (data.streams || []).find(item => item.codec_type === 'video');
+  const stream = (data.streams || []).find((item) => item.codec_type === 'video');
   const duration = Number(data.format?.duration || 0);
-  if (!stream || !duration || duration > 600) throw new Error('视频必须包含画面且时长不能超过 10 分钟');
+  if (!stream || !duration || duration > 600) throw new Error('Video must contain a picture stream and be no longer than 10 minutes');
   return { duration: Math.round(duration), width: Number(stream.width || 0), height: Number(stream.height || 0) };
 };
 
-const isReferenced = (db, filename) => db.notes.some(note => String(note.content || '').includes(`/uploads/cms/videos/${filename}`));
+const isVideoReferenced = (db, filename) => db.notes.some((note) => String(note.content || '').includes(`/uploads/cms/videos/${filename}`));
 
 router.use(attachAuthState);
-
-router.post('/auth', cmsAuthLimiter, asyncHandler(authenticateCms));
-
-router.post('/logout', (req, res) => {
-  clearAuthCookie(res);
-  send(res, 200, { ok: true });
-});
 
 router.get('/me', viewer, (req, res) => {
   send(res, 200, { role: req.cmsRole });
 });
-
-router.put('/password', editor, asyncHandler(async (req, res) => {
-  const currentKey = String(req.body?.currentKey || '').trim();
-  const nextKey = String(req.body?.newKey || '').trim();
-
-  if (!await verifyEditorPassword(currentKey)) {
-    return send(res, 401, { error: 'Current editor password is incorrect' });
-  }
-  if (!/^\d{6}$/.test(nextKey)) {
-    return send(res, 400, { error: 'New editor password must be 6 digits' });
-  }
-  if (currentKey === nextKey) {
-    return send(res, 400, { error: 'New editor password must be different' });
-  }
-
-  await setSharedEditorPassword(nextKey);
-  clearAuthCookie(res);
-  return send(res, 200, { ok: true });
-}));
 
 router.get('/notes', viewer, asyncHandler(async (req, res) => {
   const db = await loadDB();
@@ -229,6 +192,7 @@ router.put('/notes/:id', editor, asyncHandler(async (req, res) => {
   }
 
   const content = body.content !== undefined ? String(body.content) : current.content;
+  const previousImages = extractCmsUploadFilenames(current.content);
   const timestamp = nowIso();
   const updated = {
     ...current,
@@ -248,16 +212,20 @@ router.put('/notes/:id', editor, asyncHandler(async (req, res) => {
 
   db.notes[index] = updated;
   await persistDB();
+  await cleanupUnreferencedCmsUploads({ notes: db.notes, candidates: previousImages });
   return send(res, 200, updated);
 }));
 
 router.delete('/notes/:id', editor, asyncHandler(async (req, res) => {
   const db = await loadDB();
   const id = Number(req.params.id);
+  const deletedNote = db.notes.find(note => note.id === id);
+  const previousImages = extractCmsUploadFilenames(deletedNote?.content);
   const before = db.notes.length;
   db.notes = db.notes.filter(note => note.id !== id);
   if (db.notes.length === before) return send(res, 404, { error: 'Note not found' });
   await persistDB();
+  await cleanupUnreferencedCmsUploads({ notes: db.notes, candidates: previousImages });
   return send(res, 200, { ok: true });
 }));
 
@@ -375,14 +343,13 @@ router.get('/media', viewer, asyncHandler(async (req, res) => {
   const search = String(req.query.search || '').trim().toLowerCase();
   const page = Math.max(1, Number(req.query.page) || 1);
   const pageSize = Math.min(50, Math.max(1, Number(req.query.pageSize) || 20));
-  const filtered = db.media.filter(item => !search || `${item.originalName} ${item.mime}`.toLowerCase().includes(search));
-  const items = filtered.slice((page - 1) * pageSize, page * pageSize);
-  return send(res, 200, { items, total: filtered.length, page, pageSize });
+  const filtered = db.media.filter((item) => !search || `${item.originalName} ${item.mime}`.toLowerCase().includes(search));
+  return send(res, 200, { items: filtered.slice((page - 1) * pageSize, page * pageSize), total: filtered.length, page, pageSize });
 }));
 
 router.post('/media', editor, (req, res) => {
   videoUpload.single('video')(req, res, async (error) => {
-    if (error || !req.file) return send(res, 400, { error: error?.message || '请选择 MP4、WebM 或 Ogg 视频' });
+    if (error || !req.file) return send(res, 400, { error: error?.message || 'Select an MP4, WebM, or Ogg video' });
     try {
       const meta = await probeVideo(req.file.path);
       const db = await loadDB();
@@ -390,23 +357,26 @@ router.post('/media', editor, (req, res) => {
       const posterName = `${id}.jpg`;
       fs.mkdirSync(videoPosterDir, { recursive: true });
       await execFileAsync('ffmpeg', ['-y', '-ss', '0', '-i', req.file.path, '-frames:v', '1', '-vf', 'scale=640:-2', path.join(videoPosterDir, posterName)], { maxBuffer: 1024 * 1024 });
-      const item = { id, originalName: decodeUploadName(req.file.originalname), mime: req.file.mimetype, size: req.file.size, duration: meta.duration, width: meta.width, height: meta.height, url: `/uploads/cms/videos/${req.file.filename}`, posterUrl: `/uploads/cms/video-posters/${posterName}`, createdAt: new Date().toISOString() };
-      db.media.unshift(item); await persistDB();
+      const item = { id, originalName: decodeUploadName(req.file.originalname), mime: req.file.mimetype, size: req.file.size, duration: meta.duration, width: meta.width, height: meta.height, url: `/uploads/cms/videos/${req.file.filename}`, posterUrl: `/uploads/cms/video-posters/${posterName}`, createdAt: nowIso() };
+      db.media.unshift(item);
+      await persistDB();
       return send(res, 201, item);
     } catch (probeError) {
       await fsp.unlink(req.file.path).catch(() => {});
-      return send(res, 400, { error: probeError.message || '视频校验失败' });
+      return send(res, 400, { error: probeError.message || 'Video validation failed' });
     }
   });
 });
 
 router.delete('/media/:id', editor, asyncHandler(async (req, res) => {
   const db = await loadDB();
-  const index = db.media.findIndex(item => item.id === req.params.id);
-  if (index < 0) return send(res, 404, { error: '媒体不存在' });
-  const item = db.media[index]; const filename = path.basename(new URL(`http://cms${item.url}`).pathname);
-  if (isReferenced(db, filename)) return send(res, 409, { error: '视频仍被笔记引用，不能删除' });
-  db.media.splice(index, 1); await persistDB();
+  const index = db.media.findIndex((item) => item.id === req.params.id);
+  if (index < 0) return send(res, 404, { error: 'Media not found' });
+  const item = db.media[index];
+  const filename = path.basename(new URL(`http://cms${item.url}`).pathname);
+  if (isVideoReferenced(db, filename)) return send(res, 409, { error: 'Video is still referenced by a note' });
+  db.media.splice(index, 1);
+  await persistDB();
   await fsp.unlink(path.join(videoUploadDir, filename)).catch(() => {});
   if (item.posterUrl) await fsp.unlink(path.join(videoPosterDir, path.basename(item.posterUrl))).catch(() => {});
   return send(res, 200, { ok: true });
@@ -414,6 +384,9 @@ router.delete('/media/:id', editor, asyncHandler(async (req, res) => {
 
 router.post('/upload', editor, (req, res) => {
   upload.single('image')(req, res, (error) => {
+    if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
+      return send(res, 400, { code: 'FILE_TOO_LARGE', error: '图片超过 20 MB，无法上传' });
+    }
     if (error) return send(res, 400, { error: error.message || 'Upload failed' });
     if (!req.file) return send(res, 400, { error: 'No file selected' });
     return send(res, 201, {
@@ -422,5 +395,14 @@ router.post('/upload', editor, (req, res) => {
     });
   });
 });
+
+router.post('/uploads/cleanup', editor, asyncHandler(async (req, res) => {
+  const db = await loadDB();
+  const removed = await cleanupUnreferencedCmsUploads({
+    notes: db.notes,
+    minAgeMs: 24 * 60 * 60 * 1000,
+  });
+  return send(res, 200, { removed, count: removed.length });
+}));
 
 export default router;

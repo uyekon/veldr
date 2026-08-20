@@ -21,7 +21,7 @@ onMounted(async () => {
   const isAuthenticated = localStorage.getItem('cms_authenticated') === 'true';
   if (!isAuthenticated) return;
 
-  const response = await apiFetch('/api/password/info', {
+  const response = await apiFetch('/api/auth/me', {
     skipUnauthorizedRedirect: true
   }).catch(() => null);
 

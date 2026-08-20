@@ -36,6 +36,7 @@ const clickActions = {
   'delete-editing-note': (App) => App.deleteNote(),
   'upload-image': (App) => App.uploadImage(),
   'upload-video': (App) => App.uploadVideo(),
+  'open-media-library': (App) => App.openMediaLibrary(),
   'upload-gallery': (App) => App.uploadGallery(),
   'delete-selected-image': (App) => App.deleteSelectedImage(),
   'set-image-layout': (App, el) => App.setImageLayout(el.dataset.imageLayout),

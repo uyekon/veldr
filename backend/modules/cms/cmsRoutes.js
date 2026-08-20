@@ -94,6 +94,17 @@ const videoUpload = multer({
   fileFilter: (req, file, cb) => cb(null, allowedVideos.has(file.mimetype)),
 });
 
+// Multer decodes multipart filenames as Latin-1 in some clients. Recover the
+// original UTF-8 filename so Chinese titles remain readable in the media API.
+const decodeUploadName = (name) => {
+  const value = String(name || '');
+  if (!/[\u00c0-\u00ff]/.test(value)) return value;
+  try {
+    const decoded = Buffer.from(value, 'latin1').toString('utf8');
+    return decoded.includes('\ufffd') ? value : decoded;
+  } catch { return value; }
+};
+
 const probeVideo = async (filename) => {
   const { stdout } = await execFileAsync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type,width,height', '-of', 'json', filename], { maxBuffer: 1024 * 1024 });
   const data = JSON.parse(stdout);
@@ -379,7 +390,7 @@ router.post('/media', editor, (req, res) => {
       const posterName = `${id}.jpg`;
       fs.mkdirSync(videoPosterDir, { recursive: true });
       await execFileAsync('ffmpeg', ['-y', '-ss', '0', '-i', req.file.path, '-frames:v', '1', '-vf', 'scale=640:-2', path.join(videoPosterDir, posterName)], { maxBuffer: 1024 * 1024 });
-      const item = { id, originalName: req.file.originalname, mime: req.file.mimetype, size: req.file.size, duration: meta.duration, width: meta.width, height: meta.height, url: `/uploads/cms/videos/${req.file.filename}`, posterUrl: `/uploads/cms/video-posters/${posterName}`, createdAt: new Date().toISOString() };
+      const item = { id, originalName: decodeUploadName(req.file.originalname), mime: req.file.mimetype, size: req.file.size, duration: meta.duration, width: meta.width, height: meta.height, url: `/uploads/cms/videos/${req.file.filename}`, posterUrl: `/uploads/cms/video-posters/${posterName}`, createdAt: new Date().toISOString() };
       db.media.unshift(item); await persistDB();
       return send(res, 201, item);
     } catch (probeError) {

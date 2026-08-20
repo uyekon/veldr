@@ -13,6 +13,15 @@ const dataDir = resolveFromBackend(config.cms.dataDir);
 const uploadDir = resolveFromBackend(config.cms.uploadDir);
 const dbFile = path.join(dataDir, config.cms.dbFile);
 
+const repairFilenameEncoding = (name) => {
+  const value = String(name || '');
+  if (!/[\u00c0-\u00ff]/.test(value)) return value;
+  try {
+    const decoded = Buffer.from(value, 'latin1').toString('utf8');
+    return decoded.includes('\ufffd') ? value : decoded;
+  } catch { return value; }
+};
+
 let db = null;
 let writeChain = Promise.resolve();
 
@@ -50,6 +59,7 @@ const loadDB = async () => {
   if (!Array.isArray(db.categories)) db.categories = defaultDB().categories;
   if (!Array.isArray(db.menus)) db.menus = [];
   if (!Array.isArray(db.media)) db.media = [];
+  db.media = db.media.map(item => ({ ...item, originalName: repairFilenameEncoding(item.originalName) }));
   return db;
 };
 

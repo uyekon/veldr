@@ -12,6 +12,7 @@ import { menuMethods } from './app/menus.js';
 import { categoryMethods } from './app/categories.js';
 import { notesViewMethods } from './app/notes-view.js';
 import { editorMethods } from './app/editor.js';
+import { mediaMethods } from './app/media.js';
 import { uiMethods } from './app/ui.js';
 import { routerMethods, installRouter } from './app/router.js';
 import { installDelegation } from './app/delegate.js';
@@ -24,6 +25,7 @@ Object.assign(
   categoryMethods,
   notesViewMethods,
   editorMethods,
+  mediaMethods,
   uiMethods,
   routerMethods,
 );

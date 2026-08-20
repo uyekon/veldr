@@ -307,6 +307,8 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
   border-color:var(--a500);box-shadow:0 0 0 3px rgb(34 197 94/.1);
 }
 .markdown-editor{display:block}
+.editor-loading{display:none;align-items:center;justify-content:center;min-height:160px;color:var(--c500);font-size:.875rem}
+.editor-loading--active{display:flex}
 .markdown-editor-host{min-width:0;min-height:500px;border:1px solid var(--c200);border-radius:8px;background:#fff;overflow:auto}
 .markdown-editor-host .tiptap{min-height:460px;padding:var(--s5);outline:0;font-family:var(--font-sans);font-size:.98rem;line-height:1.75;color:var(--c800)}
 .markdown-editor-host .tiptap p.is-editor-empty:first-child::before{content:attr(data-placeholder);float:left;height:0;color:var(--c400);pointer-events:none}
@@ -753,6 +755,7 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
           <span id="imageUploadLabel"></span>
         </div>
         <div class="markdown-editor markdown-editor--split" id="markdownEditor">
+          <div class="editor-loading" id="editorLoading" role="status" aria-live="polite">正在加载编辑器…</div>
           <div class="markdown-editor-host" id="noteContentHost"></div>
           <div class="markdown-source">
             <textarea class="modal__textarea" id="noteContent" placeholder="在此编写笔记内容...&#10;&#10;支持 Markdown 格式：&#10;# 一级标题&#10;## 二级标题&#10;**粗体** *斜体*&#10;- 列表项&#10;```代码块```"></textarea>
@@ -773,6 +776,22 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
       <button class="btn btn--danger" id="modalDeleteBtn" style="display:none;margin-right:auto" data-action="delete-editing-note">删除笔记</button>
       <button class="btn btn--secondary" data-action="close-note-modal">取消</button>
       <button class="btn btn--primary" id="modalSaveBtn" data-action="save-note">保存笔记</button>
+    </div>
+  </div>
+</div>
+
+<!-- Draft recovery modal -->
+<div class="modal-overlay" id="draftRecoveryModal" role="dialog" aria-modal="true" aria-labelledby="draftRecoveryTitle">
+  <div class="modal" style="max-width:460px">
+    <div class="modal__header">
+      <h3 class="modal__title" id="draftRecoveryTitle">恢复本地草稿</h3>
+    </div>
+    <div class="modal__body">
+      <p id="draftRecoveryMessage" style="margin:0;color:var(--c600);line-height:1.7"></p>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" data-action="use-server-draft">使用服务器版本</button>
+      <button class="btn btn--primary" id="restoreDraftBtn" data-action="restore-draft">恢复草稿</button>
     </div>
   </div>
 </div>

@@ -1,18 +1,8 @@
-import { Editor, Node, mergeAttributes } from '@tiptap/core';
-import StarterKit from '@tiptap/starter-kit';
-import { Markdown } from '@tiptap/markdown';
-import Image from '@tiptap/extension-image';
-import FileHandler from '@tiptap/extension-file-handler';
-import Placeholder from '@tiptap/extension-placeholder';
-import { TableKit } from '@tiptap/extension-table';
-import TaskList from '@tiptap/extension-task-list';
-import TaskItem from '@tiptap/extension-task-item';
 import { apiPath } from '../config.js';
 import {
   IMAGE_WIDTHS,
   MAX_GALLERY_COLUMNS,
   MIN_GALLERY_COLUMNS,
-  normalizeMarkdownForEditor,
   normalizeMarkdownStructure,
   normalizeImageWidths,
 } from '../markdown-utils.js';
@@ -42,153 +32,6 @@ function imageMarkdown(attrs) {
   if (/^\d+$/.test(width)) return `${base}{width=${width}px}`;
   if (IMAGE_WIDTHS.has(widthPercent)) return `${base}{width=${widthPercent}%}`;
   return base;
-}
-
-const VeldrImage = Image.extend({
-  addAttributes() {
-    return {
-      ...this.parent?.(),
-      widthPercent: {
-        default: null,
-        parseHTML: (element) => element.getAttribute('data-width-percent'),
-        renderHTML: (attributes) => attributes.widthPercent ? { 'data-width-percent': attributes.widthPercent } : {},
-      },
-    };
-  },
-  parseMarkdown(token, helpers) {
-    const encodedTitle = String(token.title || '');
-    const widthMatch = encodedTitle.match(/^veldr-width=(\d+)(%|px)$/);
-    return helpers.createNode('image', {
-      src: token.href,
-      alt: token.text || null,
-      title: widthMatch ? null : (token.title || null),
-      width: widthMatch?.[2] === 'px' ? Number(widthMatch[1]) : null,
-      widthPercent: widthMatch?.[2] === '%' ? Number(widthMatch[1]) : null,
-    });
-  },
-  renderMarkdown(node) {
-    return imageMarkdown(node.attrs || {});
-  },
-}).configure({
-  resize: {
-    enabled: true,
-    directions: ['left', 'right', 'top-left', 'top-right', 'bottom-left', 'bottom-right'],
-    minWidth: 80,
-    minHeight: 50,
-    alwaysPreserveAspectRatio: true,
-  },
-});
-
-const ImageGallery = Node.create({
-  name: 'imageGallery',
-  group: 'block',
-  content: 'image+',
-  isolating: true,
-  draggable: true,
-  addAttributes() {
-    return { columns: { default: 2 } };
-  },
-  parseHTML() {
-    return [{ tag: 'div[data-veldr-image-gallery]' }];
-  },
-  renderHTML({ HTMLAttributes }) {
-    const columns = Math.min(MAX_GALLERY_COLUMNS, Math.max(MIN_GALLERY_COLUMNS, Number(HTMLAttributes.columns) || MIN_GALLERY_COLUMNS));
-    return ['div', mergeAttributes(HTMLAttributes, {
-      'data-veldr-image-gallery': '',
-      class: 'tiptap-image-gallery',
-      style: `--gallery-columns:${columns}`,
-    }), 0];
-  },
-  renderMarkdown(node, helpers) {
-    const columns = Math.min(MAX_GALLERY_COLUMNS, Math.max(MIN_GALLERY_COLUMNS, Number(node.attrs?.columns) || MIN_GALLERY_COLUMNS));
-    return `:::images{columns=${columns}}\n${helpers.renderChildren(node.content || [], '\n')}\n:::\n\n`;
-  },
-});
-
-const VeldrVideo = Node.create({
-  name: 'video',
-  group: 'block',
-  atom: true,
-  draggable: true,
-  addAttributes() {
-    return {
-      src: { default: null },
-      poster: { default: null },
-    };
-  },
-  parseHTML() {
-    return [{ tag: 'video[src]' }];
-  },
-  renderHTML({ HTMLAttributes }) {
-    return ['video', mergeAttributes({ controls: 'controls', preload: 'metadata' }, HTMLAttributes)];
-  },
-  renderMarkdown(node) {
-    const src = String(node.attrs?.src || '').replace(/"/g, '&quot;');
-    const poster = node.attrs?.poster ? ` poster="${String(node.attrs.poster).replace(/"/g, '&quot;')}"` : '';
-    return `<video controls preload="metadata"${poster} src="${src}"></video>`;
-  },
-});
-
-function galleryImages(markdown) {
-  const images = [];
-  const matcher = /!\[([^\]]*)\]\(([^\s)]+)(?:\s+"([^"]*)")?\)(?:\{width=(\d+)(?:%|px)?\})?/g;
-  let match;
-  while ((match = matcher.exec(markdown))) {
-    const encodedWidth = String(match[3] || '').match(/^veldr-width=(\d+)(%|px)$/);
-    images.push({
-      type: 'image',
-      attrs: {
-        alt: match[1] || null,
-        src: match[2],
-        title: encodedWidth ? null : (match[3] || null),
-        width: match[4] ? Number(match[4]) : (encodedWidth?.[2] === 'px' ? Number(encodedWidth[1]) : null),
-        widthPercent: encodedWidth?.[2] === '%' ? Number(encodedWidth[1]) : null,
-      },
-    });
-  }
-  return images;
-}
-
-function parseLegacyMarkdown(editor, markdown) {
-  const galleries = [];
-  const videos = [];
-  let source = normalizeMarkdownForEditor(markdown).replace(
-    /^:::images\{columns=(2|3|4)\}\s*$([\s\S]*?)^:::\s*$/gm,
-    (_, columns, body) => {
-      const token = `VELDR_GALLERY_${galleries.length}_TOKEN`;
-      galleries.push({ columns: Number(columns), images: galleryImages(body) });
-      return `\n\n${token}\n\n`;
-    },
-  );
-  source = source.replace(/<video\b([^>]*)><\/video>/gi, (_match, attributes) => {
-    const src = String(attributes.match(/\bsrc=["']([^"']+)["']/i)?.[1] || '');
-    if (!src) return '';
-    const poster = String(attributes.match(/\bposter=["']([^"']+)["']/i)?.[1] || '');
-    const token = `VELDR_VIDEO_${videos.length}_TOKEN`;
-    videos.push({ src, poster });
-    return `\n\n${token}\n\n`;
-  });
-  const content = editor.markdown.parse(source);
-
-  const replaceTokens = (node) => {
-    if (!node?.content) return node;
-    const children = node.content.map(replaceTokens);
-    if (node.type === 'paragraph' && children.length === 1 && children[0]?.type === 'text') {
-      const match = String(children[0].text || '').match(/^VELDR_GALLERY_(\d+)_TOKEN$/);
-      if (match) {
-        const gallery = galleries[Number(match[1])];
-        if (gallery?.images.length) return { type: 'imageGallery', attrs: { columns: gallery.columns }, content: gallery.images };
-      }
-      const videoMatch = String(children[0].text || '').match(/^VELDR_VIDEO_(\d+)_TOKEN$/);
-      if (videoMatch) {
-        const video = videos[Number(videoMatch[1])];
-        if (video?.src) return { type: 'video', attrs: video };
-      }
-    }
-    return { ...node, content: children };
-  };
-
-  return replaceTokens(content);
 }
 
 function getUploadErrorMessage(response, data, fallback) {
@@ -242,7 +85,7 @@ export const editorMethods = {
     this.autosaveDirty = false;
     this.conflictPending = false;
     this.suppressAutosave = true;
-    this.setEditorMarkdown(content);
+    await this.setEditorMarkdown(content);
     this.setEditorMode('write');
     this.updateMarkdownPreview(true);
     this.suppressAutosave = false;
@@ -251,67 +94,6 @@ export const editorMethods = {
     setTimeout(() => titleEl.focus(), 100);
   },
 
-  ensureRichEditor() {
-    if (this.richEditor) return this.richEditor;
-    const host = document.getElementById('noteContentHost');
-    if (!host) return null;
-
-    const receiveFiles = (files, position) => {
-      const layout = this.getSelectedImageLayout();
-      this.uploadImageFiles(files, {
-        mode: files.length > 1 ? 'gallery' : layout.mode,
-        columns: layout.columns,
-        position,
-      });
-    };
-
-    this.richEditor = new Editor({
-      element: host,
-      extensions: [
-        StarterKit.configure({ link: { openOnClick: false } }),
-        Markdown.configure({ markedOptions: { gfm: true, breaks: true } }),
-        VeldrImage,
-        ImageGallery,
-        VeldrVideo,
-        Placeholder.configure({ placeholder: '在此编写笔记内容，支持 Markdown 快捷输入…' }),
-        FileHandler.configure({
-          allowedMimeTypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml', 'image/avif', 'image/bmp'],
-          consumePasteEvent: true,
-          onPaste: (_editor, files) => receiveFiles(files),
-          onDrop: (_editor, files, position) => receiveFiles(files, position),
-        }),
-        TableKit.configure({ table: { resizable: true } }),
-        TaskList,
-        TaskItem.configure({ nested: true }),
-      ],
-      editorProps: {
-        attributes: { class: 'tiptap' },
-        handleKeyDown: (_view, event) => this.handleEditorKeydown(event),
-        handleClickOn: (_view, _position, node, nodePosition) => {
-          if (node.type.name !== 'image' || !this.richEditor) return false;
-          this.richEditor.chain().focus().setNodeSelection(nodePosition).run();
-          return true;
-        },
-        handleDOMEvents: {
-          click: (view, event) => {
-            if (!(event.target instanceof Element) || !event.target.closest('img')) return false;
-            const hit = view.posAtCoords({ left: event.clientX, top: event.clientY });
-            const candidates = [hit?.pos, hit?.pos && hit.pos - 1].filter(Number.isInteger);
-            const imagePosition = candidates.find((position) => view.state.doc.nodeAt(position)?.type.name === 'image');
-            if (!Number.isInteger(imagePosition) || !this.richEditor) return false;
-            this.richEditor.chain().focus().setNodeSelection(imagePosition).run();
-            event.preventDefault();
-            return true;
-          },
-        },
-      },
-      onUpdate: () => {
-        this.clearPercentWidthAfterResize();
-        this.updateMarkdownPreview();
-      },
-    });
-    return this.richEditor;
-  },
 
   getEditorMarkdown() {
     const source = document.getElementById('noteContent');
@@ -333,13 +115,32 @@ export const editorMethods = {
     });
   },
 
-  setEditorMarkdown(markdown) {
-    const editor = this.ensureRichEditor();
+  async ensureRichEditor() {
+    if (this.richEditor) return this.richEditor;
+    if (this.richEditorLoadPromise) return this.richEditorLoadPromise;
+    const host = document.getElementById('noteContentHost');
+    if (!host) return null;
+    document.getElementById('editorLoading')?.classList.add('editor-loading--active');
+    this.richEditorLoadPromise = import('./rich-editor.js')
+      .then(({ createRichEditor, parseLegacyMarkdown }) => {
+        this.richEditorModule = { parseLegacyMarkdown };
+        this.richEditor = createRichEditor(this, host);
+        return this.richEditor;
+      })
+      .finally(() => {
+        this.richEditorLoadPromise = null;
+        document.getElementById('editorLoading')?.classList.remove('editor-loading--active');
+      });
+    return this.richEditorLoadPromise;
+  },
+
+  async setEditorMarkdown(markdown) {
+    const editor = await this.ensureRichEditor();
     if (!editor) return;
     const source = normalizeMarkdownStructure(normalizeImageWidths(markdown));
     const sourceEl = document.getElementById('noteContent');
     if (sourceEl) sourceEl.value = source;
-    editor.commands.setContent(parseLegacyMarkdown(editor, source), { emitUpdate: false });
+    editor.commands.setContent(this.richEditorModule.parseLegacyMarkdown(editor, source), { emitUpdate: false });
   },
 
   getEditorDraft() {
@@ -376,26 +177,40 @@ export const editorMethods = {
     const draft = await loadDraft(note?.id).catch(() => null);
     if (!draft || !isDraftNewerThanNote(draft, note)) return false;
 
-    const message = note
-      ? '检测到此笔记有较新的本地草稿。是否恢复草稿？'
-      : '检测到未保存的新笔记草稿。是否恢复？';
-    if (!confirm(message)) {
-      await removeDraft(note?.id).catch(() => {});
-      return false;
-    }
+    return new Promise((resolve) => {
+      this.pendingDraftRecovery = { draft, note, resolve };
+      document.getElementById('draftRecoveryMessage').textContent = note
+        ? `检测到比服务器版本更新的本地草稿，保存时间：${new Date(draft.updatedAt).toLocaleString()}。`
+        : `检测到未保存的新笔记草稿，保存时间：${new Date(draft.updatedAt).toLocaleString()}。`;
+      document.getElementById('draftRecoveryModal')?.classList.add('modal-overlay--active');
+      setTimeout(() => document.getElementById('restoreDraftBtn')?.focus(), 0);
+    });
 
+  },
+
+  async resolveDraftRecovery(restore) {
+    const pending = this.pendingDraftRecovery;
+    if (!pending) return;
+    this.pendingDraftRecovery = null;
+    document.getElementById('draftRecoveryModal')?.classList.remove('modal-overlay--active');
+    if (!restore) {
+      await removeDraft(pending.note?.id).catch(() => {});
+      pending.resolve(false);
+      return;
+    }
+    const { draft } = pending;
     this.suppressAutosave = true;
     document.getElementById('noteTitle').value = draft.title;
     this.ensureCategoryOptions(draft.category || this.getDefaultCategoryId());
     document.getElementById('noteCategory').value = draft.category || this.getDefaultCategoryId();
     document.getElementById('noteTags').value = (draft.tags || []).join(', ');
     this.draftNotebookId = draft.notebookId ?? this.draftNotebookId;
-    this.setEditorMarkdown(draft.content);
+    await this.setEditorMarkdown(draft.content);
     this.setEditorMode('write');
     this.suppressAutosave = false;
     this.autosaveDirty = true;
     this.setAutosaveStatus('已恢复本地草稿，等待保存');
-    return true;
+    pending.resolve(true);
   },
 
   async saveNote(options = {}) {
@@ -489,11 +304,11 @@ export const editorMethods = {
 
   setEditorMode(mode) {
     const wrapper = document.getElementById('markdownEditor');
-    const editor = this.ensureRichEditor();
+    const editor = this.richEditor;
     const source = document.getElementById('noteContent');
     if (!wrapper || !editor) return;
     const nextMode = ['write', 'source', 'preview'].includes(mode) ? mode : 'write';
-    if (this.currentEditorMode === 'source' && nextMode === 'write') this.setEditorMarkdown(source?.value || '');
+    if (this.currentEditorMode === 'source' && nextMode === 'write') void this.setEditorMarkdown(source?.value || '');
     if (nextMode === 'source' && source) source.value = editor.getMarkdown();
     this.currentEditorMode = nextMode;
     wrapper.className = `markdown-editor markdown-editor--${nextMode}`;
@@ -585,8 +400,8 @@ export const editorMethods = {
   async handleVersionConflict(remote) {
     this.conflictPending = true;
     if (confirm('这篇笔记在其他设备上更新过。加载服务器版本并放弃当前编辑吗？')) {
-      if (remote) this.applyRemoteNoteToEditor(remote);
-      else if (this.editingNoteId) this.applyRemoteNoteToEditor(await this.api('GET', apiPath(`/notes/${this.editingNoteId}`)));
+      if (remote) await this.applyRemoteNoteToEditor(remote);
+      else if (this.editingNoteId) await this.applyRemoteNoteToEditor(await this.api('GET', apiPath(`/notes/${this.editingNoteId}`)));
       this.conflictPending = false; this.toast('已加载服务器版本'); return;
     }
     if (!confirm('要用当前内容覆盖服务器版本吗？')) return;
@@ -601,14 +416,14 @@ export const editorMethods = {
     } catch (error) { this.toast(error.message); } finally { this.showLoading(false); }
   },
 
-  applyRemoteNoteToEditor(note) {
+  async applyRemoteNoteToEditor(note) {
     if (!note) return;
     this.suppressAutosave = true;
     document.getElementById('noteTitle').value = note.title || '';
     this.ensureCategoryOptions(note.category || this.getDefaultCategoryId());
     document.getElementById('noteCategory').value = note.category || this.getDefaultCategoryId();
     document.getElementById('noteTags').value = (note.tags || []).join(', ');
-    this.setEditorMarkdown(note.content || '');
+    await this.setEditorMarkdown(note.content || '');
     this.draftNotebookId = note.notebookId || null;
     this.editingNoteVersion = Number(note.version) || 1;
     this.autosaveDirty = false; this.conflictPending = false;
@@ -619,7 +434,7 @@ export const editorMethods = {
   },
 
   applyMarkdownFormat(type) {
-    const editor = this.ensureRichEditor();
+    const editor = this.richEditor;
     if (!editor || this.currentEditorMode === 'source') return;
     const chain = editor.chain().focus();
     const heading = { h1: 1, h2: 2, h3: 3 }[type];
@@ -741,7 +556,7 @@ export const editorMethods = {
         source?.setRangeText(markup, source.selectionStart, source.selectionEnd, 'end');
         this.handleSourceInput();
       } else {
-        this.ensureRichEditor()?.chain().focus().insertContent({ type: 'video', attrs: { src: data.url, poster: data.posterUrl || null } }).run();
+        this.richEditor?.chain().focus().insertContent({ type: 'video', attrs: { src: data.url, poster: data.posterUrl || null } }).run();
       }
       this.toast('Video uploaded and inserted');
     } catch (error) {

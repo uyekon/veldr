@@ -102,6 +102,11 @@ const boot = () => {
       return;
     }
     if (e.key === 'Escape') {
+      const draftRecoveryModal = document.getElementById('draftRecoveryModal');
+      if (draftRecoveryModal?.classList.contains('modal-overlay--active')) {
+        App.resolveDraftRecovery(false);
+        return;
+      }
       const shortcutModal = document.getElementById('shortcutModal');
       if (shortcutModal?.classList.contains('modal-overlay--active')) {
         App.closeShortcutModal();
@@ -140,6 +145,9 @@ const boot = () => {
   });
   document.getElementById('shortcutModal')?.addEventListener('click', function (e) {
     if (e.target === this) App.closeShortcutModal();
+  });
+  document.getElementById('draftRecoveryModal')?.addEventListener('click', function (e) {
+    if (e.target === this) App.resolveDraftRecovery(false);
   });
 };
 

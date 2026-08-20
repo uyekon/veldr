@@ -9,6 +9,7 @@ let app;
 let databases;
 let Password;
 let resetDBForTests;
+let cleanupCmsUploads;
 let tempDir;
 let cmsUploadDir;
 const username = 'admin';
@@ -26,6 +27,7 @@ beforeAll(async () => {
   ({ databases } = await import('../config/databases.js'));
   ({ default: Password } = await import('../models/Password.js'));
   ({ resetDBForTests } = await import('../modules/cms/cmsStore.js'));
+  ({ cleanupCmsUploads } = await import('../modules/cms/cmsMaintenance.js'));
   cmsUploadDir = path.join(tempDir, 'cms-uploads');
   await databases.main.sync({ force: true });
   await databases.security.sync({ force: true });
@@ -119,6 +121,20 @@ describe('NoteFlow administrator access', () => {
     await expect(fs.access(stale)).rejects.toThrow();
     await expect(fs.access(fresh)).resolves.toBeUndefined();
     await expect(fs.access(referenced)).resolves.toBeUndefined();
+  });
+
+  it('lets the scheduled cleanup use the same grace period and reference rules', async () => {
+    await fs.mkdir(cmsUploadDir, { recursive: true });
+    const stale = path.join(cmsUploadDir, 'scheduled-stale.png');
+    const fresh = path.join(cmsUploadDir, 'scheduled-fresh.png');
+    await Promise.all([fs.writeFile(stale, 'stale'), fs.writeFile(fresh, 'fresh')]);
+    const old = new Date(Date.now() - 25 * 60 * 60 * 1000);
+    await fs.utimes(stale, old, old);
+
+    const result = await cleanupCmsUploads();
+    expect(result.removed).toContain('scheduled-stale.png');
+    await expect(fs.access(stale)).rejects.toThrow();
+    await expect(fs.access(fresh)).resolves.toBeUndefined();
   });
 
   it('uses the same authenticated session for the CMS identity endpoint', async () => {

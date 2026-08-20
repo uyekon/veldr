@@ -1,0 +1,19 @@
+[Unit]
+Description=Veldr CMS upload cleanup
+After=veldr-backend.service
+Wants=veldr-backend.service
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/veldr/backend
+EnvironmentFile=-/opt/veldr/backend/.env
+Environment=NODE_ENV=production
+ExecStart=/usr/local/bin/node scripts/cleanup-cms-uploads.js
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/opt/veldr/backend/public/data
+ReadWritePaths=/opt/veldr/backend/public/uploads

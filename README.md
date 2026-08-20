@@ -195,6 +195,21 @@ cd backend
 node scripts/cleanup-unused-images.js --delete
 ```
 
+CMS uploads that have not been referenced by a note for at least 24 hours can be cleaned with:
+
+```bash
+cd backend
+node scripts/cleanup-cms-uploads.js
+```
+
+To install the production daily cleanup timer, opt in explicitly during backend deployment. Normal backend deployments do not add, change, or reload this timer.
+
+```powershell
+.\scripts\deploy-backend.ps1 -Deploy -SshKey C:\Users\indep\.ssh\id_ed25519 -DeployCmsCleanupTimer
+```
+
+The timer runs daily at 03:20 with up to 15 minutes of randomized delay. Check it with `systemctl status veldr-cms-upload-cleanup.timer` or inspect runs with `journalctl -u veldr-cms-upload-cleanup.service`.
+
 ## Verification
 
 Useful checks before pushing:

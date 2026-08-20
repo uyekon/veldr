@@ -10,6 +10,7 @@ import { asyncHandler } from '../../middleware/errorHandler.js';
 import { loadDB, persistDB, nextId, normalizeTags, uploadDir } from './cmsStore.js';
 import { requireEditor, requireViewer } from './cmsAuth.js';
 import { cleanupUnreferencedCmsUploads, extractCmsUploadFilenames } from './cmsImages.js';
+import { cleanupCmsUploads } from './cmsMaintenance.js';
 
 const router = express.Router();
 const execFileAsync = promisify(execFile);
@@ -397,12 +398,7 @@ router.post('/upload', editor, (req, res) => {
 });
 
 router.post('/uploads/cleanup', editor, asyncHandler(async (req, res) => {
-  const db = await loadDB();
-  const removed = await cleanupUnreferencedCmsUploads({
-    notes: db.notes,
-    minAgeMs: 24 * 60 * 60 * 1000,
-  });
-  return send(res, 200, { removed, count: removed.length });
+  return send(res, 200, await cleanupCmsUploads());
 }));
 
 export default router;

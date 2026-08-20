@@ -9,6 +9,7 @@ param(
   [switch]$SkipInstall,
   [switch]$SkipService,
   [switch]$UploadEnv,
+  [switch]$DeployCmsCleanupTimer,
   [switch]$KeepPackage
 )
 
@@ -17,6 +18,8 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $backendPath = Join-Path $repoRoot "backend"
 $servicePath = Join-Path $repoRoot "deploy\systemd\veldr-backend.service"
+$cleanupServicePath = Join-Path $repoRoot "deploy\systemd\veldr-cms-upload-cleanup.service"
+$cleanupTimerPath = Join-Path $repoRoot "deploy\systemd\veldr-cms-upload-cleanup.timer"
 $archiveName = "veldr-backend.tgz"
 $archivePath = Join-Path $backendPath $archiveName
 $uploadEnvPath = Join-Path $backendPath ".veldr-backend.env.upload"
@@ -97,6 +100,10 @@ if (-not (Test-Path -LiteralPath $backendPath)) {
 
 if (-not (Test-Path -LiteralPath $servicePath)) {
   throw "Missing systemd service file: $servicePath"
+}
+
+if ($DeployCmsCleanupTimer -and ((-not (Test-Path -LiteralPath $cleanupServicePath)) -or (-not (Test-Path -LiteralPath $cleanupTimerPath)))) {
+  throw "Missing CMS cleanup systemd files under deploy\systemd"
 }
 
 if ($UploadEnv) {
@@ -180,6 +187,13 @@ foreach ($server in $Servers) {
     }
   }
 
+  if ($DeployCmsCleanupTimer) {
+    Invoke-Checked "Uploading CMS cleanup timer files to $target" {
+      & scp @sshArgs $cleanupServicePath "${target}:/tmp/veldr-cms-upload-cleanup.service"
+      & scp @sshArgs $cleanupTimerPath "${target}:/tmp/veldr-cms-upload-cleanup.timer"
+    }
+  }
+
   $remoteCommand = @(
     "set -e",
     "cd $(Quote-Sh $remoteParent)",
@@ -209,6 +223,14 @@ foreach ($server in $Servers) {
     $remoteCommand += "systemctl enable $(Quote-Sh $ServiceName)"
     $remoteCommand += "systemctl restart $(Quote-Sh $ServiceName)"
     $remoteCommand += "systemctl --no-pager --full status $(Quote-Sh $ServiceName)"
+  }
+
+  if ($DeployCmsCleanupTimer) {
+    $remoteCommand += "mv /tmp/veldr-cms-upload-cleanup.service /etc/systemd/system/veldr-cms-upload-cleanup.service"
+    $remoteCommand += "mv /tmp/veldr-cms-upload-cleanup.timer /etc/systemd/system/veldr-cms-upload-cleanup.timer"
+    $remoteCommand += "systemctl daemon-reload"
+    $remoteCommand += "systemctl enable --now veldr-cms-upload-cleanup.timer"
+    $remoteCommand += "systemctl --no-pager --full status veldr-cms-upload-cleanup.timer"
   }
 
   Invoke-Checked "Activating backend on $target" {

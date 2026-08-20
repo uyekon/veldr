@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Veldr CMS upload cleanup daily
+
+[Timer]
+OnCalendar=*-*-* 03:20:00
+RandomizedDelaySec=15m
+Persistent=true
+Unit=veldr-cms-upload-cleanup.service
+
+[Install]
+WantedBy=timers.target

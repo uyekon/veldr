@@ -57,6 +57,7 @@ const loadDB = async () => {
 
   if (!Array.isArray(db.notes)) db.notes = [];
   if (!Array.isArray(db.categories)) db.categories = defaultDB().categories;
+  db.categories = db.categories.map(category => ({ ...category, parentId: category.parentId || null }));
   if (!Array.isArray(db.menus)) db.menus = [];
   if (!Array.isArray(db.media)) db.media = [];
   db.media = db.media.map(item => ({ ...item, originalName: repairFilenameEncoding(item.originalName) }));

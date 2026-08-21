@@ -248,7 +248,11 @@ router.post('/categories', editor, asyncHandler(async (req, res) => {
     suffix += 1;
   }
 
-  const category = { id, label };
+  const parentId = req.body?.parentId ? String(req.body.parentId) : null;
+  if (parentId && !db.categories.some(category => category.id === parentId)) {
+    return send(res, 400, { error: 'Parent category not found' });
+  }
+  const category = { id, label, parentId };
   db.categories.push(category);
   await persistDB();
   return send(res, 201, category);
@@ -262,7 +266,11 @@ router.put('/categories/:id', editor, asyncHandler(async (req, res) => {
   const label = String(req.body?.label || '').trim();
   if (!label) return send(res, 400, { error: 'Category label is required' });
 
-  db.categories[index] = { ...db.categories[index], label };
+  const parentId = req.body?.parentId === undefined ? db.categories[index].parentId || null : (req.body.parentId ? String(req.body.parentId) : null);
+  if (parentId && (parentId === req.params.id || !db.categories.some(category => category.id === parentId))) {
+    return send(res, 400, { error: 'Invalid parent category' });
+  }
+  db.categories[index] = { ...db.categories[index], label, parentId };
   await persistDB();
   return send(res, 200, db.categories[index]);
 }));
@@ -275,7 +283,9 @@ router.delete('/categories/:id', editor, asyncHandler(async (req, res) => {
   if (index === -1) return send(res, 404, { error: 'Category not found' });
 
   const fallback = db.categories.find(category => category.id !== id)?.id || 'work';
+  const parentId = db.categories[index].parentId || null;
   db.categories = db.categories.filter(category => category.id !== id);
+  db.categories = db.categories.map(category => category.parentId === id ? { ...category, parentId } : category);
   db.notes = db.notes.map(note => (
     note.category === id ? { ...note, category: fallback } : note
   ));

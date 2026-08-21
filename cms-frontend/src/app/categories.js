@@ -10,6 +10,13 @@ export const categoryMethods = {
     return this._categories.find(category => category.id === id) || null;
   },
 
+  getCategoryDepth(category, seen = new Set()) {
+    if (!category?.parentId || seen.has(category.id)) return 0;
+    seen.add(category.id);
+    const parent = this.getCategoryById(category.parentId);
+    return parent ? 1 + this.getCategoryDepth(parent, seen) : 0;
+  },
+
   getCategoryLabel(id) {
     return this.getCategoryById(id)?.label || id || '未分类';
   },
@@ -31,7 +38,7 @@ export const categoryMethods = {
     if (!select) return;
     const value = selectedId || select.value || this.getDefaultCategoryId();
     select.innerHTML = this._categories.map(category => (
-      `<option value="${this.escapeHTML(category.id)}">${this.escapeHTML(category.label)}</option>`
+      `<option value="${this.escapeHTML(category.id)}">${'— '.repeat(this.getCategoryDepth(category))}${this.escapeHTML(category.label)}</option>`
     )).join('');
     select.value = this.getCategoryById(value) ? value : this.getDefaultCategoryId();
   },
@@ -50,9 +57,9 @@ export const categoryMethods = {
       return;
     }
 
-    const visibleCategories = this._categories.filter((category) => (
-      scopedNotes.some((note) => note.category === category.id)
-    ));
+    const visibleIds = new Set(scopedNotes.map(note => note.category));
+    this._categories.forEach(category => { let parent = category.parentId; while (parent) { visibleIds.add(parent); parent = this.getCategoryById(parent)?.parentId; } });
+    const visibleCategories = this._categories.filter(category => visibleIds.has(category.id));
     container.innerHTML = visibleCategories.map(category => {
       const filter = this.getCategoryFilter(category.id);
       const active = this.currentFilter === filter;
@@ -60,10 +67,11 @@ export const categoryMethods = {
       return `
         <a class="sidebar__item sidebar__category ${active ? 'sidebar__item--active' : ''}" data-filter="${this.escapeHTML(filter)}" data-action="set-filter">
           <svg class="sidebar__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h5l2 3h11v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 7V5a2 2 0 0 1 2-2h4l2 4"/></svg>
-          <span class="sidebar__item-text">${this.escapeHTML(category.label)}</span>
+          <span class="sidebar__item-text" style="padding-left:${this.getCategoryDepth(category) * 14}px">${this.escapeHTML(category.label)}</span>
           <span class="sidebar__count">${count}</span>
           ${isEditor ? `<span class="sidebar__item-actions">
             <button class="sidebar__icon-btn" type="button" title="重命名分类" data-action="rename-category" data-id="${this.escapeHTML(category.id)}">✎</button>
+            <button class="sidebar__icon-btn" type="button" title="添加子分类" data-action="add-subcategory" data-id="${this.escapeHTML(category.id)}">＋</button>
             <button class="sidebar__icon-btn sidebar__icon-btn--danger" type="button" title="删除分类" data-action="delete-category" data-id="${this.escapeHTML(category.id)}">×</button>
           </span>` : ''}
         </a>`;
@@ -76,12 +84,25 @@ export const categoryMethods = {
     const label = prompt('请输入新分类名称：', '新分类');
     if (!label || !label.trim()) return;
     try {
-      const category = await this.api('POST', apiPath('/categories'), { label: label.trim() });
+      const category = await this.api('POST', apiPath('/categories'), { label: label.trim(), parentId: null });
       await this.reloadCategories();
       this.renderCategories();
       this.renderMobileFilters();
       this.setFilter(this.getCategoryFilter(category.id));
       this.toast('分类已添加');
+    } catch (e) { this.toast(e.message); }
+  },
+
+  async addSubcategory(parentId) {
+    if (this.role !== 'editor') { this.toast('需要管理员登录'); return; }
+    const parent = this.getCategoryById(parentId);
+    if (!parent) return;
+    const label = prompt(`请输入“${parent.label}”下的子分类名称：`, '新子分类');
+    if (!label || !label.trim()) return;
+    try {
+      const category = await this.api('POST', apiPath('/categories'), { label: label.trim(), parentId });
+      await this.reloadCategories(); this.renderCategories(); this.renderMobileFilters();
+      this.setFilter(this.getCategoryFilter(category.id)); this.toast('子分类已添加');
     } catch (e) { this.toast(e.message); }
   },
 
@@ -125,11 +146,9 @@ export const categoryMethods = {
     const scopedNotes = this.getScopedNotes();
     const items = [
       { filter: 'all', label: '所有笔记', count: scopedNotes.length },
-      ...this._categories.filter((category) => (
-        scopedNotes.some((note) => note.category === category.id)
-      )).map(category => ({
+      ...this._categories.filter((category) => scopedNotes.some((note) => note.category === category.id)).map(category => ({
         filter: this.getCategoryFilter(category.id),
-        label: category.label,
+        label: `${'— '.repeat(this.getCategoryDepth(category))}${category.label}`,
         count: scopedNotes.filter(n => n.category === category.id).length,
       })),
       { filter: 'star', label: '收藏夹', count: scopedNotes.filter(n => n.starred).length },

@@ -8,6 +8,7 @@ const clickActions = {
   'delete-menu': (App, el) => App.deleteMenu(el.dataset.id),
   'set-filter': (App, el) => App.setFilterFromElement(el),
   'add-category': (App) => App.addCategory(),
+  'add-subcategory': (App, el) => App.addSubcategory(el.dataset.id),
   'rename-category': (App, el) => App.renameCategory(el.dataset.id),
   'delete-category': (App, el) => App.deleteCategory(el.dataset.id),
   'show-detail': (App, el) => App.showDetail(Number(el.dataset.id)),

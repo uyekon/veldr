@@ -37,10 +37,41 @@ export const categoryMethods = {
     const select = document.getElementById('noteCategory');
     if (!select) return;
     const value = selectedId || select.value || this.getDefaultCategoryId();
-    select.innerHTML = this._categories.map(category => (
-      `<option value="${this.escapeHTML(category.id)}">${'— '.repeat(this.getCategoryDepth(category))}${this.escapeHTML(category.label)}</option>`
+    const roots = this._categories.filter(category => !category.parentId);
+    select.innerHTML = roots.map(category => (
+      `<option value="${this.escapeHTML(category.id)}">${this.escapeHTML(category.label)}</option>`
     )).join('');
-    select.value = this.getCategoryById(value) ? value : this.getDefaultCategoryId();
+    const selected = this.getCategoryById(value);
+    select.value = selected?.parentId || (selected && !selected.parentId ? selected.id : this.getDefaultCategoryId());
+    this.syncSubcategoryOptions(value);
+  },
+
+  syncSubcategoryOptions(selectedId) {
+    const parentSelect = document.getElementById('noteCategory');
+    const childSelect = document.getElementById('noteSubcategory');
+    if (!parentSelect || !childSelect) return;
+    const selected = this.getCategoryById(selectedId || parentSelect.value);
+    const parentId = selected?.parentId || parentSelect.value;
+    const children = this._categories.filter(category => category.parentId === parentId);
+    childSelect.innerHTML = `<option value="">${children.length ? '不使用子分类' : '无子分类'}</option>${children.map(category => `<option value="${this.escapeHTML(category.id)}">${this.escapeHTML(category.label)}</option>`).join('')}`;
+    childSelect.disabled = children.length === 0;
+    if (selected?.parentId === parentId) childSelect.value = selected.id;
+  },
+
+  getSelectedCategoryId() {
+    return document.getElementById('noteSubcategory')?.value || document.getElementById('noteCategory')?.value || this.getDefaultCategoryId();
+  },
+
+  setCategorySelection(id) {
+    this.ensureCategoryOptions(id);
+    this.syncSubcategoryOptions(id);
+  },
+
+  ensureNotebookOptions(selectedId) {
+    const select = document.getElementById('noteNotebook');
+    if (!select) return;
+    select.innerHTML = this._menus.filter(menu => menu.type !== 'page').map(menu => `<option value="${this.escapeHTML(menu.id)}">${this.escapeHTML(menu.label)}</option>`).join('');
+    select.value = this._menus.some(menu => menu.id === selectedId) ? selectedId : (this.getCurrentNotebookId?.() || this._menus[0]?.id || '');
   },
 
   renderCategories() {

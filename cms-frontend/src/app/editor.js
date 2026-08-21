@@ -64,8 +64,7 @@ export const editorMethods = {
       document.getElementById('modalTitle').textContent = '编辑笔记';
       document.getElementById('modalSaveBtn').textContent = '更新笔记';
       titleEl.value = existingNote.title;
-      this.ensureCategoryOptions(existingNote.category);
-      categoryEl.value = existingNote.category;
+      this.setCategorySelection(existingNote.category);
       tagsEl.value = (existingNote.tags || []).join(', ');
       content = existingNote.content || '';
       this.editingNoteVersion = Number(existingNote.version) || 1;
@@ -74,12 +73,12 @@ export const editorMethods = {
       document.getElementById('modalTitle').textContent = '新建笔记';
       document.getElementById('modalSaveBtn').textContent = '保存笔记';
       titleEl.value = '';
-      this.ensureCategoryOptions(this.getDefaultCategoryId());
-      categoryEl.value = this.getDefaultCategoryId();
+      this.setCategorySelection(this.getDefaultCategoryId());
       tagsEl.value = '';
       deleteBtn.style.display = 'none';
     }
     this.draftNotebookId = existingNote?.notebookId ?? this.getCurrentNotebookId();
+    this.ensureNotebookOptions(this.draftNotebookId);
 
     modal.classList.add('modal-overlay--active');
     this.autosaveDirty = false;
@@ -148,7 +147,7 @@ export const editorMethods = {
     return createDraftRecord({
       noteId: this.editingNoteId,
       title: document.getElementById('noteTitle')?.value,
-      category: document.getElementById('noteCategory')?.value,
+      category: this.getSelectedCategoryId(),
       tags: tagsRaw ? tagsRaw.split(',').map((tag) => tag.trim()).filter(Boolean) : [],
       content: this.getEditorMarkdown(),
       notebookId: this.draftNotebookId,
@@ -201,8 +200,7 @@ export const editorMethods = {
     const { draft } = pending;
     this.suppressAutosave = true;
     document.getElementById('noteTitle').value = draft.title;
-    this.ensureCategoryOptions(draft.category || this.getDefaultCategoryId());
-    document.getElementById('noteCategory').value = draft.category || this.getDefaultCategoryId();
+    this.setCategorySelection(draft.category || this.getDefaultCategoryId());
     document.getElementById('noteTags').value = (draft.tags || []).join(', ');
     this.draftNotebookId = draft.notebookId ?? this.draftNotebookId;
     await this.setEditorMarkdown(draft.content);
@@ -400,7 +398,7 @@ export const editorMethods = {
     const tagsRaw = document.getElementById('noteTags').value.trim();
     return {
       title: document.getElementById('noteTitle').value.trim(),
-      category: document.getElementById('noteCategory').value,
+      category: this.getSelectedCategoryId(),
       tags: tagsRaw ? tagsRaw.split(',').map((tag) => tag.trim()).filter(Boolean) : [],
       content: this.getEditorMarkdown().trim(),
       notebookId: this.draftNotebookId,
@@ -430,11 +428,11 @@ export const editorMethods = {
     if (!note) return;
     this.suppressAutosave = true;
     document.getElementById('noteTitle').value = note.title || '';
-    this.ensureCategoryOptions(note.category || this.getDefaultCategoryId());
-    document.getElementById('noteCategory').value = note.category || this.getDefaultCategoryId();
+    this.setCategorySelection(note.category || this.getDefaultCategoryId());
     document.getElementById('noteTags').value = (note.tags || []).join(', ');
     await this.setEditorMarkdown(note.content || '');
     this.draftNotebookId = note.notebookId || null;
+    this.ensureNotebookOptions(this.draftNotebookId);
     this.editingNoteVersion = Number(note.version) || 1;
     this.autosaveDirty = false; this.conflictPending = false;
     this.suppressAutosave = false;

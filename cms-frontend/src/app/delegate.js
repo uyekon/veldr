@@ -97,8 +97,10 @@ export function installDelegation(App) {
 
   bind('searchInput', 'input', () => App.filter());
   bind('noteTitle', 'input', () => App.scheduleAutosave());
-  bind('noteCategory', 'change', () => App.scheduleAutosave());
   bind('noteTags', 'input', () => App.scheduleAutosave());
+  bind('noteCategory', 'change', () => { App.syncSubcategoryOptions(); App.scheduleAutosave(); });
+  bind('noteSubcategory', 'change', () => App.scheduleAutosave());
+  bind('noteNotebook', 'change', (e) => { App.draftNotebookId = e.target.value || null; App.scheduleAutosave(); });
   bind('imageInput', 'change', (e) => App.handleImageSelected(e));
   bind('videoInput', 'change', (e) => App.handleVideoSelected(e));
   bind('noteContent', 'input', () => App.handleSourceInput());

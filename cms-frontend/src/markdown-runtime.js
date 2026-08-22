@@ -82,6 +82,9 @@ const render = (source) => {
   const normalizedSource = normalizeMarkdownStructure(normalizeImageWidths(normalizeEscapedImageMarkdown(source)));
   const { markdown, grids } = extractImageGrids(normalizedSource);
   let html = marked.parse(markdown);
+  // marked emits a plain <ul> for GFM task lists; mark those lists so they
+  // don't inherit ordinary-list bullets alongside the checkbox.
+  html = html.replace(/<ul>(\s*<li><input\b)/g, '<ul class="contains-task-list">$1');
   grids.forEach((grid, index) => {
     const token = `VELDR_IMAGE_GRID_${index}_TOKEN`;
     html = html.replace(new RegExp(`<p>\\s*${token}\\s*</p>`, 'g'), grid);

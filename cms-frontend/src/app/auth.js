@@ -147,8 +147,6 @@ export const authMethods = {
     const isEditor = this.role === 'editor';
     const newBtn = document.getElementById('newNoteBtn');
     if (newBtn) newBtn.style.display = isEditor ? '' : 'none';
-    const mobileNewBtn = document.getElementById('mobileNewNoteBtn');
-    if (mobileNewBtn) mobileNewBtn.style.display = isEditor ? '' : 'none';
     const badge = document.getElementById('roleBadge');
     if (badge) {
       badge.textContent = isEditor ? `管理员${this.adminUsername ? ` · ${this.adminUsername}` : ''}` : '查看模式';

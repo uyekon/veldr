@@ -135,6 +135,11 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
 }
 .sidebar__item--active .sidebar__count{color:var(--a600);background:var(--a100)}
 .sidebar__category .sidebar__count{margin-left:0}
+.sidebar__category-group{position:relative}
+.sidebar__category-children{display:none;padding-left:14px}
+.sidebar__category-group:hover > .sidebar__category-children,.sidebar__category-group--active > .sidebar__category-children{display:block}
+.sidebar__category-chevron{margin-left:auto;color:var(--c400);font-size:1.1rem;line-height:1;transition:transform .15s var(--ease)}
+.sidebar__category-group:hover > .sidebar__item .sidebar__category-chevron,.sidebar__category-group--active > .sidebar__item .sidebar__category-chevron{transform:rotate(90deg);color:var(--a600)}
 .sidebar__item-actions{display:none;margin-left:auto;gap:4px}
 .sidebar__category:hover .sidebar__item-actions{display:flex}
 .sidebar__icon-btn{

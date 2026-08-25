@@ -91,22 +91,26 @@ export const categoryMethods = {
     const visibleIds = new Set(scopedNotes.map(note => note.category));
     this._categories.forEach(category => { let parent = category.parentId; while (parent) { visibleIds.add(parent); parent = this.getCategoryById(parent)?.parentId; } });
     const visibleCategories = this._categories.filter(category => visibleIds.has(category.id));
-    container.innerHTML = visibleCategories.map(category => {
+    const renderCategory = (category) => {
       const filter = this.getCategoryFilter(category.id);
       const active = this.currentFilter === filter;
       const count = scopedNotes.filter(note => note.category === category.id).length;
-      return `
+      const children = visibleCategories.filter(child => child.parentId === category.id);
+      const childActive = children.some(child => this.currentFilter === this.getCategoryFilter(child.id));
+      return `<div class="sidebar__category-group ${children.length && (active || childActive) ? 'sidebar__category-group--active' : ''}">
         <a class="sidebar__item sidebar__category ${active ? 'sidebar__item--active' : ''}" data-filter="${this.escapeHTML(filter)}" data-action="set-filter">
           <svg class="sidebar__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h5l2 3h11v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 7V5a2 2 0 0 1 2-2h4l2 4"/></svg>
-          <span class="sidebar__item-text" style="padding-left:${this.getCategoryDepth(category) * 14}px">${this.escapeHTML(category.label)}</span>
+          <span class="sidebar__item-text">${this.escapeHTML(category.label)}</span>
+          ${children.length ? '<span class="sidebar__category-chevron" aria-hidden="true">›</span>' : ''}
           <span class="sidebar__count">${count}</span>
           ${isEditor ? `<span class="sidebar__item-actions">
             <button class="sidebar__icon-btn" type="button" title="重命名分类" data-action="rename-category" data-id="${this.escapeHTML(category.id)}">✎</button>
             <button class="sidebar__icon-btn" type="button" title="添加子分类" data-action="add-subcategory" data-id="${this.escapeHTML(category.id)}">＋</button>
             <button class="sidebar__icon-btn sidebar__icon-btn--danger" type="button" title="删除分类" data-action="delete-category" data-id="${this.escapeHTML(category.id)}">×</button>
           </span>` : ''}
-        </a>`;
-    }).join('');
+        </a>${children.length ? `<div class="sidebar__category-children">${children.map(renderCategory).join('')}</div>` : ''}</div>`;
+    };
+    container.innerHTML = visibleCategories.filter(category => !category.parentId || !visibleCategories.some(parent => parent.id === category.parentId)).map(renderCategory).join('');
     this.ensureCategoryOptions();
   },
 

@@ -541,6 +541,9 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
   .main{padding:var(--s6) var(--s4)}
   .layout{margin-top:var(--topnav-h);height:calc(100vh - var(--topnav-h));height:calc(100dvh - var(--topnav-h))}
   .notes-grid{grid-template-columns:1fr}
+  .notes-grid{width:100%;min-width:0}
+  .note-card{width:100%;min-width:0;box-sizing:border-box;padding:var(--s4);border-radius:10px}
+  .note-card__title,.note-card__excerpt{overflow-wrap:anywhere}
   .content-header{margin-bottom:var(--s6)}
   .content-header__title{font-size:1.75rem}
   .stats-bar{gap:var(--s3)}

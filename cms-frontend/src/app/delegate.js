@@ -7,6 +7,7 @@ const clickActions = {
   'rename-menu': (App, el) => App.renameMenu(el.dataset.id),
   'delete-menu': (App, el) => App.deleteMenu(el.dataset.id),
   'set-filter': (App, el) => App.setFilterFromElement(el),
+  'sort-notes': (App, el) => { App.notesSort = el.value; App.renderNotes(); },
   'add-category': (App) => App.addCategory(),
   'add-subcategory': (App, el) => App.addSubcategory(el.dataset.id),
   'rename-category': (App, el) => App.renameCategory(el.dataset.id),
@@ -29,6 +30,7 @@ const clickActions = {
   'close-password-modal': (App) => App.closePasswordModal(),
   'change-password': (App) => App.changePassword(),
   'open-shortcut-modal': (App) => App.openShortcutModal(),
+  'toggle-editor-fullscreen': (App) => App.toggleEditorFullscreen(),
   'close-shortcut-modal': (App) => App.closeShortcutModal(),
   'close-note-modal': (App) => App.closeModal(),
   'restore-draft': (App) => App.resolveDraftRecovery(true),
@@ -102,6 +104,9 @@ export function installDelegation(App) {
   bind('noteCategory', 'change', () => { App.syncSubcategoryOptions(); App.scheduleAutosave(); });
   bind('noteSubcategory', 'change', () => App.scheduleAutosave());
   bind('noteNotebook', 'change', (e) => { App.draftNotebookId = e.target.value || null; App.scheduleAutosave(); });
+  document.addEventListener('change', (e) => {
+    if (e.target?.id === 'notesSort') { App.notesSort = e.target.value; App.renderNotes(); }
+  });
   bind('imageInput', 'change', (e) => App.handleImageSelected(e));
   bind('videoInput', 'change', (e) => App.handleVideoSelected(e));
   bind('noteContent', 'input', () => App.handleSourceInput());

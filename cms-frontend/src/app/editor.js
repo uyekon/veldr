@@ -42,6 +42,10 @@ function getUploadErrorMessage(response, data, fallback) {
 }
 
 export const editorMethods = {
+  toggleEditorFullscreen() {
+    const modal = document.getElementById('noteModal')?.querySelector('.modal');
+    modal?.classList.toggle('modal--fullscreen');
+  },
   async openNoteModal(editId) {
     if (this.role !== 'editor') {
       this.toast('查看模式下不能编辑，请先登录管理员账号');

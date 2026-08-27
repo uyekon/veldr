@@ -181,6 +181,8 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
   display:flex;align-items:center;gap:var(--s2);
 }
 .stat-pill strong{color:var(--c900)}
+.notes-sort{display:inline-flex;align-items:center;gap:8px;padding:var(--s2) var(--s3);font-size:.8125rem;color:var(--c500);background:#fff;border:1px solid var(--c200);border-radius:999px}
+.notes-sort select{border:0;outline:0;background:transparent;color:var(--c700);font:600 .8125rem var(--font-sans);cursor:pointer}
 .notes-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:var(--s5)}
 .note-card{
   background:#fff;border:1px solid var(--c200);border-radius:11px;
@@ -288,6 +290,7 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
   background:#fff;border-radius:16px;width:min(94%,960px);max-height:88vh;
   overflow-y:auto;box-shadow:0 20px 60px rgb(0 0 0/.15);
 }
+.modal--fullscreen{position:fixed;inset:12px;z-index:10;width:auto;max-width:none;max-height:none}
 .modal__header{
   padding:var(--s6) var(--s6) var(--s4);
   border-bottom:1px solid var(--c200);
@@ -539,6 +542,8 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
   .content-header{margin-bottom:var(--s6)}
   .content-header__title{font-size:1.75rem}
   .stats-bar{gap:var(--s3)}
+  .notes-sort{width:100%;justify-content:space-between;border-radius:9px}
+  .notes-sort select{flex:1;text-align:right}
   .toc{display:none!important}
   .overlay{z-index:205;background:rgb(0 0 0/.32)}
   .mobile-sheet-open .main{overflow:hidden}
@@ -793,6 +798,7 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
           <button type="button" class="modal__tool-btn" data-action="delete-selected-image" title="单击图片后删除，也可按 Delete">删除图片</button>
           <button type="button" class="modal__tool-btn" data-action="upload-video" title="上传并插入视频（MP4、WebM 或 Ogg，最长 10 分钟）">插入视频</button>
           <button type="button" class="modal__tool-btn modal__tool-btn--icon" data-action="open-shortcut-modal" title="快捷键 Ctrl+/">?</button>
+          <button type="button" class="modal__tool-btn modal__tool-btn--icon" data-action="toggle-editor-fullscreen" title="全屏编辑">⛶</button>
           <div class="modal__view-toggle" aria-label="编辑器视图">
             <button type="button" class="modal__view-btn modal__view-btn--active" data-editor-mode="write" data-action="editor-mode">编辑</button>
             <button type="button" class="modal__view-btn" data-editor-mode="source" data-action="editor-mode">源码</button>

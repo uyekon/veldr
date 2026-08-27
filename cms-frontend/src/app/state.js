@@ -5,6 +5,7 @@ export const App = {
   _menus: [],
   _categories: [],
   currentFilter: 'all',
+  notesSort: 'updated',
   currentNote: null,
   searchQuery: '',
   editingNoteId: null,

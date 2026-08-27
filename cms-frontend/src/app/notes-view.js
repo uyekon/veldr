@@ -193,7 +193,7 @@ export const notesViewMethods = {
       <div class="stats-bar">
         <div class="stat-pill">📄 共 <strong id="totalNotes">${notes.length}</strong> 篇笔记</div>
         <div class="stat-pill">🕐 最近更新：<strong id="lastUpdated">${notes.length ? notes[0].date : '—'}</strong></div>
-        <label class="notes-sort">排序<select id="notesSort" data-action="sort-notes"><option value="updated" ${this.notesSort === 'updated' ? 'selected' : ''}>最近更新</option><option value="created" ${this.notesSort === 'created' ? 'selected' : ''}>创建时间</option><option value="title" ${this.notesSort === 'title' ? 'selected' : ''}>标题</option><option value="starred" ${this.notesSort === 'starred' ? 'selected' : ''}>收藏优先</option></select></label>
+        <label class="notes-sort">排序<select id="notesSort"><option value="updated" ${this.notesSort === 'updated' ? 'selected' : ''}>最近更新</option><option value="created" ${this.notesSort === 'created' ? 'selected' : ''}>创建时间</option><option value="title" ${this.notesSort === 'title' ? 'selected' : ''}>标题</option><option value="starred" ${this.notesSort === 'starred' ? 'selected' : ''}>收藏优先</option></select></label>
       </div>
       <div class="notes-grid">`;
 

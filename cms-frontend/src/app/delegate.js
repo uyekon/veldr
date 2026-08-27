@@ -7,7 +7,6 @@ const clickActions = {
   'rename-menu': (App, el) => App.renameMenu(el.dataset.id),
   'delete-menu': (App, el) => App.deleteMenu(el.dataset.id),
   'set-filter': (App, el) => App.setFilterFromElement(el),
-  'sort-notes': (App, el) => { App.notesSort = el.value; App.renderNotes(); },
   'add-category': (App) => App.addCategory(),
   'add-subcategory': (App, el) => App.addSubcategory(el.dataset.id),
   'rename-category': (App, el) => App.renameCategory(el.dataset.id),

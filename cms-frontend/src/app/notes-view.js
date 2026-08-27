@@ -35,7 +35,7 @@ export const notesViewMethods = {
       const q = this.searchQuery.toLowerCase();
       notes = notes.filter(n =>
         (n.title || '').toLowerCase().includes(q) ||
-        (n.excerpt || '').toLowerCase().includes(q) ||
+        (n.desc || '').toLowerCase().includes(q) || (n.excerpt || '').toLowerCase().includes(q) ||
         (n.tags || []).some(t => t.toLowerCase().includes(q)) ||
         (n.content || '').toLowerCase().includes(q)
       );
@@ -253,7 +253,8 @@ export const notesViewMethods = {
     const cached = this._previewCache.get(cacheKey);
     if (cached !== undefined) return cached;
 
-    const text = this.markdownToPlainText(note?.content || note?.excerpt || '');
+    const explicit = String(note?.desc || '').trim();
+    const text = explicit || this.markdownToPlainText(note?.content || note?.excerpt || '');
     const fallback = String(note?.excerpt || '');
     const preview = text || fallback;
     const cleaned = preview

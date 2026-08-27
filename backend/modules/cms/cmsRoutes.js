@@ -47,6 +47,7 @@ const markdownExcerpt = (content) => String(content || '')
   .replace(/\s+/g, ' ')
   .trim()
   .slice(0, 120);
+const normalizeDescription = (value) => String(value || '').trim().slice(0, 500);
 
 const normalizeNoteMeta = (note) => ({
   version: noteVersion(note),
@@ -126,6 +127,7 @@ router.get('/notes', viewer, asyncHandler(async (req, res) => {
     const query = String(search).toLowerCase();
     notes = notes.filter(note =>
       (note.title || '').toLowerCase().includes(query) ||
+      (note.desc || '').toLowerCase().includes(query) ||
       (note.excerpt || '').toLowerCase().includes(query) ||
       (note.content || '').toLowerCase().includes(query) ||
       (note.tags || []).some(tagValue => String(tagValue).toLowerCase().includes(query))
@@ -153,6 +155,7 @@ router.post('/notes', editor, asyncHandler(async (req, res) => {
   }
 
   const content = String(body.content);
+  const desc = normalizeDescription(body.desc);
   const timestamp = nowIso();
   const note = {
     id: nextId(db.notes),
@@ -163,6 +166,7 @@ router.post('/notes', editor, asyncHandler(async (req, res) => {
     date: body.date || new Date().toISOString().split('T')[0],
     readTime: body.readTime || `${Math.max(1, Math.ceil(content.length / 500))} min`,
     excerpt: body.excerpt || markdownExcerpt(content),
+    desc,
     starred: Boolean(body.starred),
     content,
     version: 1,
@@ -193,6 +197,7 @@ router.put('/notes/:id', editor, asyncHandler(async (req, res) => {
   }
 
   const content = body.content !== undefined ? String(body.content) : current.content;
+  const desc = body.desc !== undefined ? normalizeDescription(body.desc) : (current.desc || '');
   const previousImages = extractCmsUploadFilenames(current.content);
   const timestamp = nowIso();
   const updated = {
@@ -203,6 +208,7 @@ router.put('/notes/:id', editor, asyncHandler(async (req, res) => {
     tags: body.tags !== undefined ? normalizeTags(body.tags) : current.tags,
     content,
     excerpt: body.excerpt !== undefined ? body.excerpt : (body.content !== undefined ? markdownExcerpt(content) : current.excerpt),
+    desc,
     starred: body.starred !== undefined ? Boolean(body.starred) : current.starred,
     date: body.date !== undefined ? body.date : current.date,
     readTime: body.readTime !== undefined ? body.readTime : current.readTime,

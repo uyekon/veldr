@@ -54,6 +54,7 @@ export const editorMethods = {
     const titleEl = document.getElementById('noteTitle');
     const categoryEl = document.getElementById('noteCategory');
     const tagsEl = document.getElementById('noteTags');
+    const descEl = document.getElementById('noteDesc');
     const deleteBtn = document.getElementById('modalDeleteBtn');
     let content = '';
     let existingNote = null;
@@ -66,6 +67,7 @@ export const editorMethods = {
       titleEl.value = existingNote.title;
       this.setCategorySelection(existingNote.category);
       tagsEl.value = (existingNote.tags || []).join(', ');
+      if (descEl) descEl.value = existingNote.desc || '';
       content = existingNote.content || '';
       this.editingNoteVersion = Number(existingNote.version) || 1;
       deleteBtn.style.display = '';
@@ -75,6 +77,7 @@ export const editorMethods = {
       titleEl.value = '';
       this.setCategorySelection(this.getDefaultCategoryId());
       tagsEl.value = '';
+      if (descEl) descEl.value = '';
       deleteBtn.style.display = 'none';
     }
     this.draftNotebookId = existingNote?.notebookId ?? this.getCurrentNotebookId();
@@ -147,6 +150,7 @@ export const editorMethods = {
     return createDraftRecord({
       noteId: this.editingNoteId,
       title: document.getElementById('noteTitle')?.value,
+      desc: document.getElementById('noteDesc')?.value || '',
       category: this.getSelectedCategoryId(),
       tags: tagsRaw ? tagsRaw.split(',').map((tag) => tag.trim()).filter(Boolean) : [],
       content: this.getEditorMarkdown(),
@@ -200,6 +204,7 @@ export const editorMethods = {
     const { draft } = pending;
     this.suppressAutosave = true;
     document.getElementById('noteTitle').value = draft.title;
+    document.getElementById('noteDesc').value = draft.desc || '';
     this.setCategorySelection(draft.category || this.getDefaultCategoryId());
     document.getElementById('noteTags').value = (draft.tags || []).join(', ');
     this.draftNotebookId = draft.notebookId ?? this.draftNotebookId;
@@ -398,6 +403,7 @@ export const editorMethods = {
     const tagsRaw = document.getElementById('noteTags').value.trim();
     return {
       title: document.getElementById('noteTitle').value.trim(),
+      desc: document.getElementById('noteDesc')?.value.trim() || '',
       category: this.getSelectedCategoryId(),
       tags: tagsRaw ? tagsRaw.split(',').map((tag) => tag.trim()).filter(Boolean) : [],
       content: this.getEditorMarkdown().trim(),
@@ -430,6 +436,7 @@ export const editorMethods = {
     document.getElementById('noteTitle').value = note.title || '';
     this.setCategorySelection(note.category || this.getDefaultCategoryId());
     document.getElementById('noteTags').value = (note.tags || []).join(', ');
+    document.getElementById('noteDesc').value = note.desc || '';
     await this.setEditorMarkdown(note.content || '');
     this.draftNotebookId = note.notebookId || null;
     this.ensureNotebookOptions(this.draftNotebookId);

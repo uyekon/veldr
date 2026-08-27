@@ -56,6 +56,7 @@ const loadDB = async () => {
   }
 
   if (!Array.isArray(db.notes)) db.notes = [];
+  db.notes = db.notes.map(note => ({ ...note, desc: typeof note.desc === 'string' ? note.desc : '' }));
   if (!Array.isArray(db.categories)) db.categories = defaultDB().categories;
   db.categories = db.categories.map(category => ({ ...category, parentId: category.parentId || null }));
   if (!Array.isArray(db.menus)) db.menus = [];

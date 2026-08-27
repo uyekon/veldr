@@ -98,6 +98,7 @@ export function installDelegation(App) {
   bind('searchInput', 'input', () => App.filter());
   bind('noteTitle', 'input', () => App.scheduleAutosave());
   bind('noteTags', 'input', () => App.scheduleAutosave());
+  bind('noteDesc', 'input', () => App.scheduleAutosave());
   bind('noteCategory', 'change', () => { App.syncSubcategoryOptions(); App.scheduleAutosave(); });
   bind('noteSubcategory', 'change', () => App.scheduleAutosave());
   bind('noteNotebook', 'change', (e) => { App.draftNotebookId = e.target.value || null; App.scheduleAutosave(); });

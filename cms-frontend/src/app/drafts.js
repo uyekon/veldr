@@ -8,6 +8,7 @@ export const createDraftRecord = (payload = {}) => ({
   key: draftKeyFor(payload.noteId),
   noteId: payload.noteId || null,
   title: String(payload.title || ''),
+  desc: String(payload.desc || ''),
   category: String(payload.category || ''),
   tags: Array.isArray(payload.tags) ? payload.tags.map(String) : [],
   content: String(payload.content || ''),

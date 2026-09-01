@@ -4,7 +4,7 @@ import { PAGE_CONTENT } from '../page-content.js';
 // ===== 导航与顶部菜单（可编辑笔记本） =====
 export const menuMethods = {
   navTo(target) {
-    if (!this.confirmEditorExit()) return;
+    if (!this.confirmEditorExit() || !this.confirmWhiteboardExit?.()) return;
     this.currentNav = target;
     this.currentNote = null;
     this.currentFilter = 'all';
@@ -16,8 +16,14 @@ export const menuMethods = {
     document.getElementById('browseView').style.display = 'none';
     document.getElementById('detailView').classList.remove('detail-view--active');
     document.getElementById('pageView').classList.remove('page-view--active');
+    document.getElementById('whiteboardView').classList.remove('whiteboard-view--active');
 
     document.querySelectorAll('.topnav__link').forEach(l => l.classList.remove('topnav__link--active'));
+    document.querySelector('.topnav__whiteboard')?.classList.toggle('topnav__whiteboard--active', target === 'whiteboard');
+    document.getElementById('mobileWhiteboardBtn')?.classList.toggle('topnav__mobile-whiteboard--active', target === 'whiteboard');
+    const newNoteBtn = document.getElementById('newNoteBtn');
+    if (newNoteBtn && target === 'whiteboard') newNoteBtn.style.display = 'none';
+    else if (newNoteBtn && this.role === 'editor') newNoteBtn.style.display = '';
     const menuEl = document.querySelector(`.topnav__link[data-nav="${target}"]`);
     if (menuEl) menuEl.classList.add('topnav__link--active');
     this.updateMobileNotebookLabel();
@@ -27,7 +33,9 @@ export const menuMethods = {
     const toc = document.getElementById('tocNav');
     toc.style.display = (window.innerWidth >= 1200 && target === 'docs') ? '' : 'none';
 
-    if (target === 'docs') {
+    if (target === 'whiteboard') {
+      this.showWhiteboard();
+    } else if (target === 'docs') {
       document.getElementById('browseView').style.display = 'block';
       this.renderBrowseToc();
       this.updateCounts();
@@ -73,7 +81,8 @@ export const menuMethods = {
       </div>
     `).join('') + (isEditor ? `
       <button class="topnav__add-menu" data-action="add-menu" title="添加笔记本">+ Notebook</button>
-    ` : '');
+    ` : '') + `
+      <button class="topnav__whiteboard ${this.currentNav === 'whiteboard' ? 'topnav__whiteboard--active' : ''}" data-action="open-whiteboard" type="button" title="快速记录备忘">白板</button>`;
     this.updateMobileNotebookLabel();
     this.renderMobileNotebooks();
   },
@@ -191,6 +200,6 @@ export const menuMethods = {
   updateMobileNotebookLabel() {
     const label = document.getElementById('mobileNotebookLabel');
     if (!label) return;
-    label.textContent = this.getCurrentNotebookLabel();
+    label.textContent = this.currentNav === 'whiteboard' ? '白板' : this.getCurrentNotebookLabel();
   },
 };

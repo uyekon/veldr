@@ -271,6 +271,25 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
 .page-view li{font-size:1rem;color:var(--c600);line-height:1.85;margin-bottom:var(--s2)}
 .page-view img{max-width:100%;height:auto;border-radius:11px;margin:var(--s6) 0;display:block;box-shadow:var(--shadow-sm)}
 
+/* ===== Whiteboard ===== */
+.whiteboard-view{display:none;max-width:920px;min-height:100%}
+.whiteboard-view--active{display:block}
+.whiteboard__header{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--s6);margin-bottom:var(--s6)}
+.whiteboard__eyebrow{display:flex;align-items:center;gap:7px;margin-bottom:var(--s2);font-size:.8125rem;font-weight:700;letter-spacing:.04em;color:var(--a700);text-transform:uppercase}
+.whiteboard__eyebrow::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--a500);box-shadow:0 0 0 4px var(--a100)}
+.whiteboard__title{font-size:2rem;font-weight:700;letter-spacing:-.03em;color:var(--c900);line-height:1.2}
+.whiteboard__desc{max-width:600px;margin-top:var(--s3);font-size:1rem;color:var(--c500);line-height:1.7}
+.whiteboard__save{flex:0 0 auto;margin-top:var(--s2)}
+.whiteboard__surface{display:flex;flex-direction:column;min-height:calc(100vh - var(--topnav-h) - 190px);min-height:calc(100dvh - var(--topnav-h) - 190px);background:#fff;border:1px solid var(--c200);border-radius:14px;box-shadow:var(--shadow-sm);overflow:hidden}
+.whiteboard__textarea{width:100%;min-height:440px;flex:1;resize:vertical;padding:var(--s6);border:0;outline:0;background:transparent;color:var(--c800);font:400 1rem/1.85 var(--font-sans);caret-color:var(--a600)}
+.whiteboard__textarea::placeholder{color:var(--c400)}
+.whiteboard__textarea:focus{box-shadow:inset 0 0 0 2px rgb(34 197 94/.28)}
+.whiteboard__textarea[readonly]{background:var(--c50);cursor:not-allowed}
+.whiteboard__footer{display:flex;align-items:center;justify-content:space-between;gap:var(--s4);padding:var(--s3) var(--s5);border-top:1px solid var(--c100);font-size:.8125rem;color:var(--c400)}
+.topnav__whiteboard{padding:var(--s2) var(--s3);font:600 .8125rem var(--font-sans);color:var(--a700);border:1px solid var(--a200);border-radius:6px;background:var(--a50);cursor:pointer;white-space:nowrap;transition:all .15s var(--ease)}
+.topnav__whiteboard:hover,.topnav__whiteboard--active{color:#fff;background:var(--a600);border-color:var(--a600)}
+.topnav__mobile-whiteboard{display:none}
+
 /* ===== Callout ===== */
 .callout{padding:var(--s4) var(--s5);border-radius:9px;margin:var(--s6) 0;border-left:3px solid}
 .callout--info{background:var(--a50);border-color:var(--a500)}
@@ -519,10 +538,17 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
   .topnav__mobile-current span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .topnav__actions{
     grid-column:1 / -1;width:100%;display:grid;
-    grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;align-items:center;
+    grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;align-items:center;
   }
   .topnav__search{grid-column:1 / -1;min-width:0}
   .topnav__search-input{width:100%;height:40px;background:#fff}
+  .topnav__mobile-whiteboard{
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;height:40px;
+    width:100%;padding:0 8px;border:1px solid var(--a200);border-radius:9px;background:var(--a50);
+    color:var(--a700);font-family:var(--font-sans);font-size:.8125rem;font-weight:600;
+    white-space:nowrap;cursor:pointer;transition:all .15s var(--ease);
+  }
+  .topnav__mobile-whiteboard--active{color:#fff;background:var(--a600);border-color:var(--a600)}
   .topnav__mobile-filter{
     display:inline-flex;align-items:center;justify-content:center;gap:6px;height:40px;
     width:100%;padding:0 11px;border:1px solid var(--c200);border-radius:9px;background:#fff;
@@ -563,6 +589,10 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
   .markdown-preview{min-height:360px;max-height:420px}
   .markdown-status{gap:var(--s2)}
   .page-view{max-width:100%}
+  .whiteboard__header{align-items:stretch;flex-direction:column;gap:var(--s4)}
+  .whiteboard__save{width:100%;margin-top:0}
+  .whiteboard__surface{min-height:calc(100dvh - var(--topnav-h) - 260px)}
+  .whiteboard__textarea{min-height:360px;padding:var(--s4)}
 }
 .overlay{position:fixed;inset:0;background:rgb(0 0 0/.2);z-index:49;display:none}
 .overlay--active{display:block}
@@ -646,6 +676,7 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
       <svg class="topnav__search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <input type="search" class="topnav__search-input" id="searchInput" placeholder="搜索笔记..." aria-label="搜索笔记">
     </div>
+    <button class="topnav__mobile-whiteboard" id="mobileWhiteboardBtn" data-action="open-whiteboard" type="button">白板</button>
     <button class="topnav__mobile-filter" id="mobileFilterBtn" data-action="open-filter-sheet" type="button">筛选</button>
     <button class="topnav__btn" id="newNoteBtn" style="display:none" data-action="open-note-modal">+ 新建笔记</button>
     <div class="topnav__profile">
@@ -669,6 +700,10 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
     <button class="mobile-sheet__close" data-action="close-notebook-sheet" type="button">×</button>
   </div>
   <div class="mobile-sheet__body">
+    <button class="mobile-sheet__item" data-action="open-whiteboard" type="button">
+      <span>白板</span>
+      <span class="mobile-sheet__item-count">备忘</span>
+    </button>
     <div id="mobileNotebookList"></div>
     <button class="mobile-sheet__add" id="mobileAddNotebookBtn" data-action="add-menu" type="button">+ 新建 Notebook</button>
     <button class="mobile-sheet__add" id="mobilePasswordBtn" data-action="open-password-modal" type="button">修改编辑密码</button>
@@ -721,6 +756,23 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
     <div id="browseView"></div>
     <div class="detail-view" id="detailView"></div>
     <div class="page-view" id="pageView"></div>
+    <section class="whiteboard-view" id="whiteboardView" aria-labelledby="whiteboardTitle">
+      <div class="whiteboard__header">
+        <div>
+          <div class="whiteboard__eyebrow">快速备忘录</div>
+          <h1 class="whiteboard__title" id="whiteboardTitle">白板</h1>
+          <p class="whiteboard__desc">随手记录待办、想法和临时备注。内容会自动保存到你的 CMS。</p>
+        </div>
+        <button class="btn btn--primary whiteboard__save" id="whiteboardSaveBtn" type="button" data-action="save-whiteboard">保存白板</button>
+      </div>
+      <div class="whiteboard__surface">
+        <textarea class="whiteboard__textarea" id="whiteboardContent" placeholder="在这里快速记录…" aria-label="白板内容" spellcheck="true"></textarea>
+        <div class="whiteboard__footer">
+          <span id="whiteboardStatus">正在加载…</span>
+          <span>Ctrl / ⌘ + S 保存</span>
+        </div>
+      </div>
+    </section>
   </main>
 
   <nav class="toc" id="tocNav">

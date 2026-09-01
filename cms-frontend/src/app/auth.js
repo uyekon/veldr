@@ -103,6 +103,11 @@ export const authMethods = {
       return;
     }
 
+    if (this.currentNav === 'whiteboard') {
+      await this.loadWhiteboard?.();
+      return;
+    }
+
     const before = this.lastKnownNotesVersion;
     await this.reloadNotes();
     this.updateCounts();

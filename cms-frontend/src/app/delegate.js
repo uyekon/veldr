@@ -3,6 +3,8 @@
 
 const clickActions = {
   'nav': (App, el) => App.navTo(el.dataset.id),
+  'open-whiteboard': (App) => App.openWhiteboard(),
+  'save-whiteboard': (App) => App.saveWhiteboard(),
   'add-menu': (App) => App.addMenu(),
   'rename-menu': (App, el) => App.renameMenu(el.dataset.id),
   'delete-menu': (App, el) => App.deleteMenu(el.dataset.id),
@@ -109,6 +111,7 @@ export function installDelegation(App) {
   bind('imageInput', 'change', (e) => App.handleImageSelected(e));
   bind('videoInput', 'change', (e) => App.handleVideoSelected(e));
   bind('noteContent', 'input', () => App.handleSourceInput());
+  bind('whiteboardContent', 'input', () => App.handleWhiteboardInput());
   bind('confirmPasswordKey', 'keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); App.changePassword(); }
   });

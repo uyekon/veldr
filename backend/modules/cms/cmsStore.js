@@ -34,6 +34,7 @@ const defaultDB = () => ({
   menus: [
     { id: 'docs', label: 'Docs', type: 'docs' },
   ],
+  whiteboard: { content: '', version: 1, updatedAt: null },
   media: [],
 });
 
@@ -60,6 +61,12 @@ const loadDB = async () => {
   if (!Array.isArray(db.categories)) db.categories = defaultDB().categories;
   db.categories = db.categories.map(category => ({ ...category, parentId: category.parentId || null }));
   if (!Array.isArray(db.menus)) db.menus = [];
+  if (!db.whiteboard || typeof db.whiteboard !== 'object') db.whiteboard = defaultDB().whiteboard;
+  db.whiteboard = {
+    content: typeof db.whiteboard.content === 'string' ? db.whiteboard.content : '',
+    version: Number(db.whiteboard.version) || 1,
+    updatedAt: db.whiteboard.updatedAt || null,
+  };
   if (!Array.isArray(db.media)) db.media = [];
   db.media = db.media.map(item => ({ ...item, originalName: repairFilenameEncoding(item.originalName) }));
   return db;

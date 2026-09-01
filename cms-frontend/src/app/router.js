@@ -4,9 +4,11 @@
 //   #/nb/<id>     → 笔记本
 //   #/page/<id>   → 自定义页面菜单
 //   #/note/<id>   → 笔记详情
+//   #/whiteboard  → 白板备忘录
 export const routerMethods = {
   currentRouteHash() {
     if (this.currentNote) return `#/note/${this.currentNote.id}`;
+    if (this.currentNav === 'whiteboard') return '#/whiteboard';
     const menu = this.getCurrentMenu();
     if (menu && menu.id !== 'docs') {
       const prefix = menu.type === 'page' ? 'page' : 'nb';
@@ -31,7 +33,9 @@ export const routerMethods = {
     this._applyingRoute = true;
     try {
       let match;
-      if ((match = hash.match(/^#\/note\/(\d+)$/))) {
+      if (hash === '#/whiteboard') {
+        this.navTo('whiteboard');
+      } else if ((match = hash.match(/^#\/note\/(\d+)$/))) {
         const id = Number(match[1]);
         if (this._notes.some(note => note.id === id)) {
           this.showDetail(id);

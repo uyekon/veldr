@@ -31,6 +31,11 @@ export const App = {
   imageUploadInFlight: false,
   pendingImageGrid: [],
   currentNav: 'docs',
+  whiteboard: null,
+  whiteboardDirty: false,
+  whiteboardSaveTimer: null,
+  whiteboardSaveInFlight: false,
+  whiteboardLoadPromise: null,
   adminUsername: '',
   role: null,            // 'viewer' | 'editor' | null
   _applyingRoute: false,

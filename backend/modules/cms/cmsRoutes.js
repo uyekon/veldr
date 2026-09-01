@@ -113,6 +113,28 @@ router.get('/me', viewer, (req, res) => {
   send(res, 200, { role: req.cmsRole });
 });
 
+router.get('/whiteboard', viewer, asyncHandler(async (_req, res) => {
+  const db = await loadDB();
+  return send(res, 200, db.whiteboard || { content: '', version: 1, updatedAt: null });
+}));
+
+router.put('/whiteboard', editor, asyncHandler(async (req, res) => {
+  const db = await loadDB();
+  const body = req.body || {};
+  if (typeof body.content !== 'string') return send(res, 400, { error: 'Whiteboard content must be text' });
+  if (body.content.length > 200000) return send(res, 400, { error: 'Whiteboard content is too long' });
+
+  const current = db.whiteboard || { content: '', version: 1, updatedAt: null };
+  const currentVersion = Number(current.version) || 1;
+  if (!body.force && body.version !== undefined && Number(body.version) !== currentVersion) {
+    return send(res, 409, { error: 'Whiteboard was updated on another device', code: 'VERSION_CONFLICT', current });
+  }
+
+  db.whiteboard = { content: body.content, version: currentVersion + 1, updatedAt: nowIso() };
+  await persistDB();
+  return send(res, 200, db.whiteboard);
+}));
+
 router.get('/notes', viewer, asyncHandler(async (req, res) => {
   const db = await loadDB();
   let notes = db.notes.map(note => ({ ...note, ...normalizeNoteMeta(note) }));

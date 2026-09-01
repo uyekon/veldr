@@ -41,6 +41,20 @@ function getUploadErrorMessage(response, data, fallback) {
   return data?.error || data?.message || fallback || `图片上传失败（HTTP ${response.status}）`;
 }
 
+// 版本号可能因同一台设备的并发自动保存而短暂落后。只有用户可编辑的
+// 字段确实不同，才把它视为需要人工决定的冲突。
+function hasSameNotePayload(left, right) {
+  const normalized = (note = {}) => ({
+    title: String(note.title || '').trim(),
+    desc: String(note.desc || '').trim(),
+    category: String(note.category || ''),
+    notebookId: note.notebookId || null,
+    tags: Array.isArray(note.tags) ? note.tags.map((tag) => String(tag).trim()).filter(Boolean) : [],
+    content: normalizeMarkdownStructure(String(note.content || '')).trim(),
+  });
+  return JSON.stringify(normalized(left)) === JSON.stringify(normalized(right));
+}
+
 export const editorMethods = {
   toggleEditorFullscreen() {
     const modal = document.getElementById('noteModal')?.querySelector('.modal');
@@ -391,12 +405,20 @@ export const editorMethods = {
       payload.version = this.editingNoteVersion;
       const updated = await this.api('PUT', apiPath(`/notes/${this.editingNoteId}`), payload);
       this.editingNoteVersion = Number(updated.version) || this.editingNoteVersion;
-      this.autosaveDirty = false;
       const local = this._notes.find((note) => note.id === updated.id);
       if (local) Object.assign(local, updated);
       this.lastKnownNotesVersion = this.getNotesVersionFingerprint();
-      await this.clearEditorDraft(updated.id);
-      this.setAutosaveStatus(`已自动保存 ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+      if (hasSameNotePayload(payload, this.getNoteFormPayload())) {
+        this.autosaveDirty = false;
+        await this.clearEditorDraft(updated.id);
+        this.setAutosaveStatus(`已自动保存 ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+      } else {
+        // 请求发送后又输入了内容：保留脏状态并继续排队，不能把新输入误标记为已保存。
+        this.autosaveDirty = true;
+        this.setAutosaveStatus('检测到新修改，等待下一次自动保存');
+        clearTimeout(this.autosaveTimer);
+        this.autosaveTimer = setTimeout(() => this.autosaveNote(), 2500);
+      }
     } catch (error) {
       if (error.status === 409 || error.code === 'VERSION_CONFLICT') this.handleVersionConflict(error.current);
       else this.setAutosaveStatus('自动保存失败');
@@ -416,13 +438,25 @@ export const editorMethods = {
   },
 
   async handleVersionConflict(remote) {
+    const localPayload = this.getNoteFormPayload();
+    if (remote && hasSameNotePayload(localPayload, remote)) {
+      this.editingNoteVersion = Number(remote.version) || this.editingNoteVersion;
+      this.autosaveDirty = false;
+      this.conflictPending = false;
+      const local = this._notes.find((note) => note.id === remote.id);
+      if (local) Object.assign(local, remote);
+      this.lastKnownNotesVersion = this.getNotesVersionFingerprint();
+      await this.clearEditorDraft(remote.id);
+      this.setAutosaveStatus(`已同步服务器版本 v${this.editingNoteVersion}`);
+      return;
+    }
+
     this.conflictPending = true;
     if (confirm('这篇笔记在其他设备上更新过。加载服务器版本并放弃当前编辑吗？')) {
       if (remote) await this.applyRemoteNoteToEditor(remote);
       else if (this.editingNoteId) await this.applyRemoteNoteToEditor(await this.api('GET', apiPath(`/notes/${this.editingNoteId}`)));
       this.conflictPending = false; this.toast('已加载服务器版本'); return;
     }
-    if (!confirm('要用当前内容覆盖服务器版本吗？')) return;
     try {
       this.showLoading(true);
       const payload = this.getNoteFormPayload(); payload.version = this.editingNoteVersion; payload.force = true;

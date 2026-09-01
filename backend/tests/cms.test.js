@@ -70,6 +70,19 @@ describe('NoteFlow administrator access', () => {
     await agent.delete(`/api/cms/notes/${note.body.id}`).expect(200);
   });
 
+  it('keeps one persisted whiteboard and protects it from stale writes', async () => {
+    await request(app).get('/api/cms/whiteboard').expect(200)
+      .expect(({ body }) => expect(body.content).toBe(''));
+    await request(app).put('/api/cms/whiteboard').send({ content: 'blocked' }).expect(401);
+
+    const agent = await editor();
+    const saved = await agent.put('/api/cms/whiteboard').send({ content: '买牛奶', version: 1 }).expect(200);
+    expect(saved.body).toMatchObject({ content: '买牛奶', version: 2 });
+    await agent.put('/api/cms/whiteboard').send({ content: 'stale', version: 1 }).expect(409);
+    await request(app).get('/api/cms/whiteboard').expect(200)
+      .expect(({ body }) => expect(body.content).toBe('买牛奶'));
+  });
+
   it('requires a valid session for uploads and reports an oversized file', async () => {
     const oversized = Buffer.alloc(20 * 1024 * 1024 + 1, 0);
     await request(app).post('/api/cms/upload').attach('image', Buffer.from('image'), { filename: 'image.png', contentType: 'image/png' }).expect(401);

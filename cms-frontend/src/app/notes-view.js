@@ -75,10 +75,12 @@ export const notesViewMethods = {
   },
 
   showBrowse() {
+    if (!this.confirmWhiteboardExit?.()) return;
     this.currentNote = null;
     document.getElementById('browseView').style.display = 'block';
     document.getElementById('detailView').classList.remove('detail-view--active');
     document.getElementById('pageView').classList.remove('page-view--active');
+    document.getElementById('whiteboardView').classList.remove('whiteboard-view--active');
     document.getElementById('tocNav').style.display = (window.innerWidth >= 1200) ? '' : 'none';
     this.renderBrowseToc();
     this.renderNotes();

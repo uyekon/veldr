@@ -14,6 +14,7 @@ import { notesViewMethods } from './app/notes-view.js';
 import { editorMethods } from './app/editor.js';
 import { mediaMethods } from './app/media.js';
 import { uiMethods } from './app/ui.js';
+import { whiteboardMethods } from './app/whiteboard.js';
 import { routerMethods, installRouter } from './app/router.js';
 import { installDelegation } from './app/delegate.js';
 
@@ -27,6 +28,7 @@ Object.assign(
   editorMethods,
   mediaMethods,
   uiMethods,
+  whiteboardMethods,
   routerMethods,
 );
 
@@ -97,6 +99,11 @@ const boot = () => {
       return;
     }
     const noteModalOpen = document.getElementById('noteModal')?.classList.contains('modal-overlay--active');
+    if (App.currentNav === 'whiteboard' && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      App.saveWhiteboard();
+      return;
+    }
     if (noteModalOpen && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
       e.preventDefault();
       App.saveNote({ keepOpen: true });
@@ -136,6 +143,7 @@ const boot = () => {
         return;
       }
       if (App.currentNote) { App.showBrowse(); return; }
+      if (App.currentNav === 'whiteboard') { App.navTo('docs'); return; }
       if (App.currentNav !== 'docs') { App.navTo('docs'); return; }
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); document.getElementById('searchInput').focus(); }

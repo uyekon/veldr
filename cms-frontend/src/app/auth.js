@@ -104,7 +104,7 @@ export const authMethods = {
     }
 
     if (this.currentNav === 'whiteboard') {
-      await this.loadWhiteboard?.();
+      await this.loadWhiteboard?.(this.activeWhiteboardId);
       return;
     }
 

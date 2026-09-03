@@ -25,6 +25,23 @@ const repairFilenameEncoding = (name) => {
 let db = null;
 let writeChain = Promise.resolve();
 
+const whiteboardIds = ['t', 'b', 'w'];
+
+const defaultWhiteboard = (id) => ({ id, content: '', version: 1, updatedAt: null });
+
+const normalizeWhiteboard = (id, whiteboard) => ({
+  id,
+  content: typeof whiteboard?.content === 'string' ? whiteboard.content : '',
+  version: Number(whiteboard?.version) || 1,
+  updatedAt: whiteboard?.updatedAt || null,
+});
+
+const legacyWhiteboard = (whiteboard) => ({
+  content: whiteboard.content,
+  version: whiteboard.version,
+  updatedAt: whiteboard.updatedAt,
+});
+
 const defaultDB = () => ({
   notes: [],
   categories: [
@@ -34,9 +51,19 @@ const defaultDB = () => ({
   menus: [
     { id: 'docs', label: 'Docs', type: 'docs' },
   ],
-  whiteboard: { content: '', version: 1, updatedAt: null },
+  whiteboards: whiteboardIds.map(defaultWhiteboard),
+  whiteboard: legacyWhiteboard(defaultWhiteboard('t')),
   media: [],
 });
+
+const normalizeWhiteboards = (database) => {
+  const storedWhiteboards = Array.isArray(database.whiteboards) ? database.whiteboards : [];
+  database.whiteboards = whiteboardIds.map((id) => {
+    const stored = storedWhiteboards.find((whiteboard) => whiteboard?.id === id);
+    return normalizeWhiteboard(id, stored || (id === 't' ? database.whiteboard : null));
+  });
+  database.whiteboard = legacyWhiteboard(database.whiteboards[0]);
+};
 
 const ensureRuntimeDirs = async () => {
   await fsp.mkdir(dataDir, { recursive: true });
@@ -44,7 +71,10 @@ const ensureRuntimeDirs = async () => {
 };
 
 const loadDB = async () => {
-  if (db) return db;
+  if (db) {
+    normalizeWhiteboards(db);
+    return db;
+  }
 
   await ensureRuntimeDirs();
 
@@ -61,12 +91,7 @@ const loadDB = async () => {
   if (!Array.isArray(db.categories)) db.categories = defaultDB().categories;
   db.categories = db.categories.map(category => ({ ...category, parentId: category.parentId || null }));
   if (!Array.isArray(db.menus)) db.menus = [];
-  if (!db.whiteboard || typeof db.whiteboard !== 'object') db.whiteboard = defaultDB().whiteboard;
-  db.whiteboard = {
-    content: typeof db.whiteboard.content === 'string' ? db.whiteboard.content : '',
-    version: Number(db.whiteboard.version) || 1,
-    updatedAt: db.whiteboard.updatedAt || null,
-  };
+  normalizeWhiteboards(db);
   if (!Array.isArray(db.media)) db.media = [];
   db.media = db.media.map(item => ({ ...item, originalName: repairFilenameEncoding(item.originalName) }));
   return db;
@@ -110,4 +135,5 @@ export {
   resetDBForTests,
   nextId,
   normalizeTags,
+  whiteboardIds,
 };

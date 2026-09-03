@@ -70,17 +70,37 @@ describe('NoteFlow administrator access', () => {
     await agent.delete(`/api/cms/notes/${note.body.id}`).expect(200);
   });
 
-  it('keeps one persisted whiteboard and protects it from stale writes', async () => {
-    await request(app).get('/api/cms/whiteboard').expect(200)
-      .expect(({ body }) => expect(body.content).toBe(''));
-    await request(app).put('/api/cms/whiteboard').send({ content: 'blocked' }).expect(401);
+  it('keeps t, b, and w whiteboards independent and protects them from stale writes', async () => {
+    await request(app).get('/api/cms/whiteboards').expect(200)
+      .expect(({ body }) => expect(body.map((whiteboard) => whiteboard.id)).toEqual(['t', 'b', 'w']));
+    await request(app).put('/api/cms/whiteboards/t').send({ content: 'blocked' }).expect(401);
 
     const agent = await editor();
-    const saved = await agent.put('/api/cms/whiteboard').send({ content: '买牛奶', version: 1 }).expect(200);
-    expect(saved.body).toMatchObject({ content: '买牛奶', version: 2 });
-    await agent.put('/api/cms/whiteboard').send({ content: 'stale', version: 1 }).expect(409);
+    const t = await agent.put('/api/cms/whiteboards/t').send({ content: '买牛奶', version: 1 }).expect(200);
+    const b = await agent.put('/api/cms/whiteboards/b').send({ content: '读书', version: 1 }).expect(200);
+    expect(t.body).toMatchObject({ id: 't', content: '买牛奶', version: 2 });
+    expect(b.body).toMatchObject({ id: 'b', content: '读书', version: 2 });
+    await agent.put('/api/cms/whiteboards/t').send({ content: 'stale', version: 1 }).expect(409);
+    await request(app).get('/api/cms/whiteboards/b').expect(200)
+      .expect(({ body }) => expect(body).toMatchObject({ id: 'b', content: '读书', version: 2 }));
+    await request(app).get('/api/cms/whiteboards/x').expect(404);
+
     await request(app).get('/api/cms/whiteboard').expect(200)
-      .expect(({ body }) => expect(body.content).toBe('买牛奶'));
+      .expect(({ body }) => expect(body).toMatchObject({ content: '买牛奶', version: 2 }));
+  });
+
+  it('migrates the legacy whiteboard into t', async () => {
+    resetDBForTests({
+      notes: [],
+      menus: [{ id: 'docs', label: 'Docs', type: 'docs' }],
+      categories: [{ id: 'work', label: 'Work' }],
+      whiteboard: { content: '旧白板内容', version: 4, updatedAt: '2026-08-01T00:00:00.000Z' },
+    });
+
+    await request(app).get('/api/cms/whiteboards/t').expect(200)
+      .expect(({ body }) => expect(body).toMatchObject({ id: 't', content: '旧白板内容', version: 4 }));
+    await request(app).get('/api/cms/whiteboards/b').expect(200)
+      .expect(({ body }) => expect(body).toMatchObject({ id: 'b', content: '', version: 1 }));
   });
 
   it('requires a valid session for uploads and reports an oversized file', async () => {

@@ -31,7 +31,7 @@ export const menuMethods = {
     this.closeMobileSheets();
 
     const toc = document.getElementById('tocNav');
-    toc.style.display = (window.innerWidth >= 1200 && target === 'docs') ? '' : 'none';
+    toc.style.display = (window.innerWidth >= 1200 && (target === 'docs' || target === 'whiteboard')) ? '' : 'none';
 
     if (target === 'whiteboard') {
       this.showWhiteboard();

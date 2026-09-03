@@ -41,7 +41,7 @@ const boot = () => {
   App.init();
 
   window.addEventListener('beforeunload', (event) => {
-    if (!App.hasUnsavedEditorInput?.()) return;
+    if (!App.hasUnsavedEditorInput?.() && !App.hasUnsavedWhiteboardInput?.()) return;
     event.preventDefault();
     event.returnValue = '';
   });
@@ -60,6 +60,11 @@ const boot = () => {
     if (detailEl?.classList.contains('detail-view--active')) {
       if (tocMediaQuery.matches) App.renderDetailToc(detailEl);
       else toc.style.display = 'none';
+      return;
+    }
+    if (App.currentNav === 'whiteboard') {
+      toc.style.display = tocMediaQuery.matches ? '' : 'none';
+      if (tocMediaQuery.matches) App.renderWhiteboardSwitcher();
       return;
     }
     const browseVisible = document.getElementById('browseView')?.style.display !== 'none';

@@ -4,6 +4,7 @@
 const clickActions = {
   'nav': (App, el) => App.navTo(el.dataset.id),
   'open-whiteboard': (App) => App.openWhiteboard(),
+  'select-whiteboard': (App, el) => App.selectWhiteboard(el.dataset.id),
   'save-whiteboard': (App) => App.saveWhiteboard(),
   'add-menu': (App) => App.addMenu(),
   'rename-menu': (App, el) => App.renameMenu(el.dataset.id),

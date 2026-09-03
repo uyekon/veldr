@@ -280,6 +280,13 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
 .whiteboard__title{font-size:2rem;font-weight:700;letter-spacing:-.03em;color:var(--c900);line-height:1.2}
 .whiteboard__desc{max-width:600px;margin-top:var(--s3);font-size:1rem;color:var(--c500);line-height:1.7}
 .whiteboard__save{flex:0 0 auto;margin-top:var(--s2)}
+.whiteboard__mobile-switcher{display:none}
+.whiteboard-switcher{display:grid;gap:var(--s2)}
+.whiteboard-switcher__button{width:100%;display:flex;align-items:center;justify-content:space-between;gap:var(--s2);padding:var(--s3);border:1px solid var(--c200);border-radius:8px;background:#fff;color:var(--c600);font:600 .875rem var(--font-sans);text-align:left;cursor:pointer;transition:all .15s var(--ease)}
+.whiteboard-switcher__button:hover{border-color:var(--a300);background:var(--a50);color:var(--a800)}
+.whiteboard-switcher__button--active{border-color:var(--a400);background:var(--a50);color:var(--a800);box-shadow:inset 3px 0 0 var(--a500)}
+.whiteboard-switcher__button small{font-size:.6875rem;font-weight:500;color:var(--c400);white-space:nowrap}
+.whiteboard-switcher__button--active small{color:var(--a700)}
 .whiteboard__surface{display:flex;flex-direction:column;min-height:calc(100vh - var(--topnav-h) - 190px);min-height:calc(100dvh - var(--topnav-h) - 190px);background:#fff;border:1px solid var(--c200);border-radius:14px;box-shadow:var(--shadow-sm);overflow:hidden}
 .whiteboard__textarea{width:100%;min-height:440px;flex:1;resize:vertical;padding:var(--s6);border:0;outline:0;background:transparent;color:var(--c800);font:400 1rem/1.85 var(--font-sans);caret-color:var(--a600)}
 .whiteboard__textarea::placeholder{color:var(--c400)}
@@ -590,6 +597,9 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
   .markdown-status{gap:var(--s2)}
   .page-view{max-width:100%}
   .whiteboard__header{align-items:stretch;flex-direction:column;gap:var(--s4)}
+  .whiteboard__mobile-switcher{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s2);margin-bottom:var(--s5)}
+  .whiteboard__mobile-switcher .whiteboard-switcher__button{min-width:0;flex-direction:column;align-items:flex-start;padding:var(--s3)}
+  .whiteboard__mobile-switcher .whiteboard-switcher__button small{overflow:hidden;max-width:100%;text-overflow:ellipsis}
   .whiteboard__save{width:100%;margin-top:0}
   .whiteboard__surface{min-height:calc(100dvh - var(--topnav-h) - 260px)}
   .whiteboard__textarea{min-height:360px;padding:var(--s4)}
@@ -765,6 +775,7 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
         </div>
         <button class="btn btn--primary whiteboard__save" id="whiteboardSaveBtn" type="button" data-action="save-whiteboard">保存白板</button>
       </div>
+      <div class="whiteboard__mobile-switcher" id="whiteboardMobileSwitcher" aria-label="切换白板"></div>
       <div class="whiteboard__surface">
         <textarea class="whiteboard__textarea" id="whiteboardContent" placeholder="在这里快速记录…" aria-label="白板内容" spellcheck="true"></textarea>
         <div class="whiteboard__footer">

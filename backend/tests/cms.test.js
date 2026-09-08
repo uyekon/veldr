@@ -70,19 +70,23 @@ describe('NoteFlow administrator access', () => {
     await agent.delete(`/api/cms/notes/${note.body.id}`).expect(200);
   });
 
-  it('keeps t, b, and w whiteboards independent and protects them from stale writes', async () => {
+  it('keeps t, b, w, and dailyPush whiteboards independent and protects them from stale writes', async () => {
     await request(app).get('/api/cms/whiteboards').expect(200)
-      .expect(({ body }) => expect(body.map((whiteboard) => whiteboard.id)).toEqual(['t', 'b', 'w']));
+      .expect(({ body }) => expect(body.map((whiteboard) => whiteboard.id)).toEqual(['t', 'b', 'w', 'dailyPush']));
     await request(app).put('/api/cms/whiteboards/t').send({ content: 'blocked' }).expect(401);
 
     const agent = await editor();
     const t = await agent.put('/api/cms/whiteboards/t').send({ content: '买牛奶', version: 1 }).expect(200);
     const b = await agent.put('/api/cms/whiteboards/b').send({ content: '读书', version: 1 }).expect(200);
+    const d = await agent.put('/api/cms/whiteboards/dailyPush').send({ content: '推送', version: 1 }).expect(200);
     expect(t.body).toMatchObject({ id: 't', content: '买牛奶', version: 2 });
     expect(b.body).toMatchObject({ id: 'b', content: '读书', version: 2 });
+    expect(d.body).toMatchObject({ id: 'dailyPush', content: '推送', version: 2 });
     await agent.put('/api/cms/whiteboards/t').send({ content: 'stale', version: 1 }).expect(409);
     await request(app).get('/api/cms/whiteboards/b').expect(200)
       .expect(({ body }) => expect(body).toMatchObject({ id: 'b', content: '读书', version: 2 }));
+    await request(app).get('/api/cms/whiteboards/dailyPush').expect(200)
+      .expect(({ body }) => expect(body).toMatchObject({ id: 'dailyPush', content: '推送', version: 2 }));
     await request(app).get('/api/cms/whiteboards/x').expect(404);
 
     await request(app).get('/api/cms/whiteboard').expect(200)

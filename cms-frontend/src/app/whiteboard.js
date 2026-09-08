@@ -1,6 +1,6 @@
 import { apiPath } from '../config.js';
 
-const WHITEBOARD_IDS = ['t', 'b', 'w'];
+const WHITEBOARD_IDS = ['t', 'b', 'w', 'dailyPush'];
 
 const formatUpdatedAt = (value) => {
   if (!value) return '尚未保存';

@@ -25,7 +25,7 @@ const repairFilenameEncoding = (name) => {
 let db = null;
 let writeChain = Promise.resolve();
 
-const whiteboardIds = ['t', 'b', 'w'];
+const whiteboardIds = ['t', 'b', 'w', 'dailyPush'];
 
 const defaultWhiteboard = (id) => ({ id, content: '', version: 1, updatedAt: null });
 

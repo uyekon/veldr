@@ -25,6 +25,26 @@ export const categoryMethods = {
     return `category:${id}`;
   },
 
+  getCategorySubtreeIds(categoryId) {
+    const ids = new Set([categoryId]);
+    const stack = [categoryId];
+    while (stack.length) {
+      const current = stack.pop();
+      for (const child of this._categories) {
+        if (child.parentId === current && !ids.has(child.id)) {
+          ids.add(child.id);
+          stack.push(child.id);
+        }
+      }
+    }
+    return ids;
+  },
+
+  countCategoryNotes(categoryId, notes) {
+    const ids = this.getCategorySubtreeIds(categoryId);
+    return notes.filter(note => ids.has(note.category)).length;
+  },
+
   isCategoryFilter(filter) {
     return String(filter || '').startsWith('category:');
   },
@@ -94,7 +114,7 @@ export const categoryMethods = {
     const renderCategory = (category) => {
       const filter = this.getCategoryFilter(category.id);
       const active = this.currentFilter === filter;
-      const count = scopedNotes.filter(note => note.category === category.id).length;
+      const count = this.countCategoryNotes(category.id, scopedNotes);
       const children = visibleCategories.filter(child => child.parentId === category.id);
       const childActive = children.some(child => this.currentFilter === this.getCategoryFilter(child.id));
       return `<div class="sidebar__category-group ${children.length && (active || childActive) ? 'sidebar__category-group--active' : ''}">
@@ -181,10 +201,13 @@ export const categoryMethods = {
     const scopedNotes = this.getScopedNotes();
     const items = [
       { filter: 'all', label: '所有笔记', count: scopedNotes.length },
-      ...this._categories.filter((category) => scopedNotes.some((note) => note.category === category.id)).map(category => ({
+      ...this._categories.filter((category) => {
+        const ids = this.getCategorySubtreeIds(category.id);
+        return scopedNotes.some((note) => ids.has(note.category));
+      }).map(category => ({
         filter: this.getCategoryFilter(category.id),
         label: `${'— '.repeat(this.getCategoryDepth(category))}${category.label}`,
-        count: scopedNotes.filter(n => n.category === category.id).length,
+        count: this.countCategoryNotes(category.id, scopedNotes),
       })),
       { filter: 'star', label: '收藏夹', count: scopedNotes.filter(n => n.starred).length },
     ];

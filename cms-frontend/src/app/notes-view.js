@@ -25,7 +25,8 @@ export const notesViewMethods = {
     if (this.currentFilter === 'star') notes = notes.filter(n => n.starred);
     else if (this.isCategoryFilter(this.currentFilter)) {
       const categoryId = this.getCategoryIdFromFilter(this.currentFilter);
-      notes = notes.filter(n => n.category === categoryId);
+      const subtreeIds = this.getCategorySubtreeIds(categoryId);
+      notes = notes.filter(n => subtreeIds.has(n.category));
     }
     else if (this.currentFilter.startsWith('tag:')) {
       const tag = this.currentFilter.slice(4);

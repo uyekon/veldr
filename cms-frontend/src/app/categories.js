@@ -377,9 +377,11 @@ export const categoryMethods = {
         });
     }
 
+    const noTagCount = scopedNotes.filter(n => !Array.isArray(n.tags) || n.tags.length === 0).length;
     const items = [
       { filter: 'all', label: '所有笔记', count: scopedNotes.length },
       ...categoryItems,
+      ...(noTagCount > 0 ? [{ filter: 'notag', label: '未标签', count: noTagCount }] : []),
       { filter: 'star', label: '收藏夹', count: scopedNotes.filter(n => n.starred).length },
     ];
     list.innerHTML = items.map(item => `

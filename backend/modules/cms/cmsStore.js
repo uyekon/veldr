@@ -47,6 +47,7 @@ const defaultDB = () => ({
   categories: [
     { id: 'work', label: '工作', notebookId: null },
     { id: 'learn', label: '学习', notebookId: null },
+    { id: 'uncategorized', label: '未分类', notebookId: null },
   ],
   menus: [
     { id: 'docs', label: 'Docs', type: 'docs' },

@@ -32,6 +32,9 @@ export const notesViewMethods = {
       const tag = this.currentFilter.slice(4);
       notes = notes.filter(n => Array.isArray(n.tags) && n.tags.includes(tag));
     }
+    else if (this.currentFilter === 'notag') {
+      notes = notes.filter(n => !Array.isArray(n.tags) || n.tags.length === 0);
+    }
     if (this.searchQuery) {
       const q = this.searchQuery.toLowerCase();
       notes = notes.filter(n =>

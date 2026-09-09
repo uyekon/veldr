@@ -67,7 +67,14 @@ export const categoryMethods = {
     const select = document.getElementById('noteCategory');
     if (!select) return;
     const value = selectedId || select.value || this.getDefaultCategoryId();
-    const roots = this._categories.filter(category => !category.parentId);
+    const notebookId = this.getCurrentNotebookId();
+    // In a notebook view, only show categories assigned to that notebook;
+    // fall back to all globally-scoped categories if none match.
+    let roots = this._categories.filter(category => !category.parentId);
+    if (notebookId) {
+      const notebookCats = roots.filter(c => c.notebookId === notebookId);
+      if (notebookCats.length > 0) roots = notebookCats;
+    }
     select.innerHTML = roots.map(category => (
       `<option value="${this.escapeHTML(category.id)}">${this.escapeHTML(category.label)}</option>`
     )).join('');
@@ -230,9 +237,11 @@ export const categoryMethods = {
   },
 
   _renderCategoriesNotebookView(container, isEditor, scopedNotes, notebookId) {
-    // In notebook view, only show categories that belong to the current notebook.
+    // Show a category in the notebook sidebar if it belongs to this notebook,
+    // OR if any note in this notebook uses this category (handles legacy
+    // categories that were created before notebookId was tracked on categories).
     const visibleCategories = this._categories.filter(category => {
-      if (notebookId && category.notebookId !== notebookId) return false;
+      if (category.notebookId && category.notebookId !== notebookId) return false;
       const ids = this.getCategorySubtreeIds(category.id);
       return [...ids].some(id => scopedNotes.some(n => n.category === id));
     });

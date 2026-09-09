@@ -319,7 +319,8 @@ router.post('/categories', editor, asyncHandler(async (req, res) => {
   if (parentId && !db.categories.some(category => category.id === parentId)) {
     return send(res, 400, { error: 'Parent category not found' });
   }
-  const category = { id, label, parentId };
+  const notebookId = req.body?.notebookId && String(req.body.notebookId).trim() ? String(req.body.notebookId) : null;
+  const category = { id, label, parentId, notebookId };
   db.categories.push(category);
   await persistDB();
   return send(res, 201, category);
@@ -337,7 +338,8 @@ router.put('/categories/:id', editor, asyncHandler(async (req, res) => {
   if (parentId && (parentId === req.params.id || !db.categories.some(category => category.id === parentId))) {
     return send(res, 400, { error: 'Invalid parent category' });
   }
-  db.categories[index] = { ...db.categories[index], label, parentId };
+  const notebookId = req.body?.notebookId === undefined ? db.categories[index].notebookId || null : (req.body.notebookId ? String(req.body.notebookId) : null);
+  db.categories[index] = { ...db.categories[index], label, parentId, notebookId };
   await persistDB();
   return send(res, 200, db.categories[index]);
 }));

@@ -45,8 +45,8 @@ const legacyWhiteboard = (whiteboard) => ({
 const defaultDB = () => ({
   notes: [],
   categories: [
-    { id: 'work', label: '工作' },
-    { id: 'learn', label: '学习' },
+    { id: 'work', label: '工作', notebookId: null },
+    { id: 'learn', label: '学习', notebookId: null },
   ],
   menus: [
     { id: 'docs', label: 'Docs', type: 'docs' },
@@ -89,7 +89,7 @@ const loadDB = async () => {
   if (!Array.isArray(db.notes)) db.notes = [];
   db.notes = db.notes.map(note => ({ ...note, desc: typeof note.desc === 'string' ? note.desc : '' }));
   if (!Array.isArray(db.categories)) db.categories = defaultDB().categories;
-  db.categories = db.categories.map(category => ({ ...category, parentId: category.parentId || null }));
+  db.categories = db.categories.map(category => ({ ...category, parentId: category.parentId || null, notebookId: typeof category.notebookId === 'string' ? category.notebookId : null }));
   if (!Array.isArray(db.menus)) db.menus = [];
   normalizeWhiteboards(db);
   if (!Array.isArray(db.media)) db.media = [];

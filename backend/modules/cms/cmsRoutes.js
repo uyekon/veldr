@@ -223,7 +223,8 @@ router.post('/notes', editor, asyncHandler(async (req, res) => {
   const note = {
     id: nextId(db.notes),
     title: String(body.title),
-    category: body.category || 'work',
+    // Default to the first existing category; fall back to 'work' only as last resort.
+    category: (body.category && String(body.category).trim()) ? String(body.category).trim() : (db.categories[0]?.id || 'work'),
     notebookId: (body.notebookId && String(body.notebookId).trim()) ? String(body.notebookId) : defaultNotebookId,
     tags: normalizeTags(body.tags),
     date: body.date || new Date().toISOString().split('T')[0],

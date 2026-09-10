@@ -186,7 +186,7 @@ export const categoryMethods = {
             const catsInGroup = [...group.ids].map(id => this._categories.find(c => c.id === id)).filter(Boolean);
             const boundCats = catsInGroup.filter(c => Array.isArray(c.notebookId) && c.notebookId.length > 0);
             return boundCats.length
-              ? `<span class="sidebar__category-notebook">${boundCats.map(c => this.escapeHTML(this._menus.find(m => m.id === c.notebookId)?.label || c.notebookId)).join(', ')}</span>`
+              ? `<span class="sidebar__category-notebook">${boundCats.flatMap(c => c.notebookId).map(nb => this.escapeHTML(this._menus.find(m => m.id === nb)?.label || nb)).join(', ')}</span>`
               : '';
           })()
         : '';

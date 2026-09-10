@@ -136,205 +136,76 @@ export const categoryMethods = {
   },
 
   _renderCategoriesDocsView(container, isEditor, scopedNotes) {
-    // Group by label: same label across notebooks merges into one sidebar entry.
-    const labelMap = new Map();
+    // Docs view: categories grouped by (label, notebookId).
+    //   - Global categories (notebookId === null): same label merges into one entry.
+    //   - Notebook-bound categories (notebookId !== null): same label merges into
+    //     one entry too, showing the notebook badge so the user knows which
+    //     notebook(s) contain notes for this category.
+    // Filtering on any merged group shows notes from all participating categories.
     const scopedCategoryIds = new Set(scopedNotes.map(n => n.category));
+
+    // Group categories by (label, notebookScope):
+    //   notebookScope = null for global, or the notebook id for bound categories.
+    const groupMap = new Map(); // key: "label|||notebookScope" -> merged group
     this._categories.forEach(cat => {
       const subtreeIds = this.getCategorySubtreeIds(cat.id);
-      const hasNotes = [...subtreeIds].some(id => scopedCategoryIds.has(id));
-      if (!hasNotes) return;
-      const existing = labelMap.get(cat.label) || {
+      const matches = [...subtreeIds].filter(id => scopedCategoryIds.has(id));
+      if (matches.length === 0) return;
+      const scope = cat.notebookId || null;
+      const key = `${cat.label}|||${scope}`;
+      const group = groupMap.get(key) || {
         label: cat.label,
-        entries: [],
+        scope, // null = global, string = notebookId
+        ids: new Set(),
         count: 0,
-        representativeId: null,
-        notebookLabel: null,
-        children: [],
+        children: new Set(),
       };
-      // Count notes under this category (subtree-scoped to notebook filter).
-      existing.count += this.countCategoryNotes(cat.id, scopedNotes);
-      if (!existing.entries.some(e => e.id === cat.id)) {
-        existing.entries.push(cat);
-      }
-      // Prefer representative with a notebookId.
-      if (!existing.representativeId) {
-        existing.representativeId = cat.id;
-        existing.notebookLabel = this.getCategoryNotebookLabel(cat);
-      } else if (cat.notebookId && !existing.notebookLabel) {
-        existing.representativeId = cat.id;
-        existing.notebookLabel = this.getCategoryNotebookLabel(cat);
-      }
-      labelMap.set(cat.label, existing);
+      group.count += this.countCategoryNotes(cat.id, scopedNotes);
+      subtreeIds.forEach(id => group.ids.add(id));
+      // Add direct children that have usage.
+      this.getChildrenOf(cat.id).forEach(child => {
+        const cIds = this.getCategorySubtreeIds(child.id);
+        if ([...cIds].some(id => scopedCategoryIds.has(id))) {
+          group.children.add(child.id);
+        }
+      });
+      groupMap.set(key, group);
     });
 
-    // Deduplicate: keep one entry per label.
-    const groups = [];
-    const seenIds = new Set();
-    labelMap.forEach((group) => {
-      if (seenIds.has(group.representativeId)) return;
-      seenIds.add(group.representativeId);
-      // Collect direct children of the representative.
-      group.children = this.getChildrenOf(group.representativeId);
-      groups.push(group);
-    });
+    // Build display list sorted by label.
+    const entries = [...groupMap.values()].sort((a, b) => a.label.localeCompare(b.label, 'zh-CN'));
 
-    const renderChild = (category) => {
-      const filter = this.getCategoryFilter(category.id);
-      const active = this.currentFilter === filter;
-      const count = this.countCategoryNotes(category.id, scopedNotes);
-      const childChildren = this.getChildrenOf(category.id);
-      const childHtml = childChildren.length
-        ? `<div class="sidebar__category-children">${childChildren.map(c => this._renderChildLink(c, scopedNotes)).join('')}</div>`
+    const renderEntry = (group) => {
+      // Use the first id in the group as the representative filter key.
+      const repId = [...group.ids][0];
+      const filter = this.getCategoryFilter(repId);
+      // Active if any participating category or its children is active.
+      const active = this.currentFilter === filter ||
+        [...group.ids].some(id => this.currentFilter === this.getCategoryFilter(id)) ||
+        group.children.some(c => this.currentFilter === this.getCategoryFilter(c.id));
+      const notebookLabel = group.scope
+        ? `<span class="sidebar__category-notebook">${this.escapeHTML(this._menus.find(m => m.id === group.scope)?.label || group.scope)}</span>`
         : '';
-      return `<a class="sidebar__item sidebar__category ${active ? 'sidebar__item--active' : ''}" data-filter="${this.escapeHTML(filter)}" data-action="set-filter">
-        <svg class="sidebar__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h5l2 3h11v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 7V5a2 2 0 0 1 2-2h4l2 4"/></svg>
-        <span class="sidebar__item-text">${this.escapeHTML(category.label)}</span>
-        <span class="sidebar__count">${count}</span>
-      </a>${childHtml}`;
-    };
-
-    const renderGroup = (group) => {
-      const filter = this.getCategoryFilter(group.representativeId);
-      const active = this.currentFilter === filter || group.children.some(c => this.currentFilter === this.getCategoryFilter(c.id));
-      const notebookLabel = group.notebookLabel
-        ? `<span class="sidebar__category-notebook">${this.escapeHTML(group.notebookLabel)}</span>`
-        : '';
-      const childrenHtml = group.children.length
-        ? `<div class="sidebar__category-children">${group.children.map(c => this._renderChildLink(c, scopedNotes)).join('')}</div>`
+      const childrenHtml = group.children.size > 0
+        ? `<div class="sidebar__category-children">${[...group.children].map(c => this._renderChildLink(c, scopedNotes)).join('')}</div>`
         : '';
       const actions = isEditor ? `<span class="sidebar__item-actions">
-        <button class="sidebar__icon-btn" type="button" title="重命名分类" data-action="rename-category" data-id="${this.escapeHTML(group.representativeId)}">✎</button>
-        <button class="sidebar__icon-btn" type="button" title="添加子分类" data-action="add-subcategory" data-id="${this.escapeHTML(group.representativeId)}">＋</button>
-        <button class="sidebar__icon-btn sidebar__icon-btn--danger" type="button" title="删除分类" data-action="delete-category" data-id="${this.escapeHTML(group.representativeId)}">×</button>
+        <button class="sidebar__icon-btn" type="button" title="重命名分类" data-action="rename-category" data-id="${this.escapeHTML(repId)}">✎</button>
+        <button class="sidebar__icon-btn" type="button" title="添加子分类" data-action="add-subcategory" data-id="${this.escapeHTML(repId)}">＋</button>
+        <button class="sidebar__icon-btn sidebar__icon-btn--danger" type="button" title="删除分类" data-action="delete-category" data-id="${this.escapeHTML(repId)}">×</button>
       </span>` : '';
-      return `<div class="sidebar__category-group ${group.children.length && active ? 'sidebar__category-group--active' : ''}">
+      return `<div class="sidebar__category-group ${group.children.size > 0 && active ? 'sidebar__category-group--active' : ''}">
         <a class="sidebar__item sidebar__category ${active ? 'sidebar__item--active' : ''}" data-filter="${this.escapeHTML(filter)}" data-action="set-filter">
           <svg class="sidebar__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h5l2 3h11v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 7V5a2 2 0 0 1 2-2h4l2 4"/></svg>
           <span class="sidebar__item-text">${this.escapeHTML(group.label)}</span>
           ${notebookLabel}
-          ${group.children.length ? '<span class="sidebar__category-chevron" aria-hidden="true">›</span>' : ''}
+          ${group.children.size > 0 ? '<span class="sidebar__category-chevron" aria-hidden="true">›</span>' : ''}
           <span class="sidebar__count">${group.count}</span>
           ${actions}
         </a>${childrenHtml}</div>`;
     };
 
-    container.innerHTML = groups.map(renderGroup).join('');
-  },
-
-  _renderChildLink(category, scopedNotes) {
-    const filter = this.getCategoryFilter(category.id);
-    const active = this.currentFilter === filter;
-    const count = this.countCategoryNotes(category.id, scopedNotes);
-    const childChildren = this.getChildrenOf(category.id);
-    const childHtml = childChildren.length
-      ? `<div class="sidebar__category-children">${childChildren.map(c => this._renderChildLink(c, scopedNotes)).join('')}</div>`
-      : '';
-    return `<a class="sidebar__item sidebar__category ${active ? 'sidebar__item--active' : ''}" data-filter="${this.escapeHTML(filter)}" data-action="set-filter">
-      <svg class="sidebar__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h5l2 3h11v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 7V5a2 2 0 0 1 2-2h4l2 4"/></svg>
-      <span class="sidebar__item-text">${this.escapeHTML(category.label)}</span>
-      <span class="sidebar__count">${count}</span>
-    </a>${childHtml}`;
-  },
-
-  _renderCategoriesNotebookView(container, isEditor, scopedNotes, notebookId) {
-    // Show a category in the notebook sidebar if it belongs to this notebook,
-    // OR if any note in this notebook uses this category (handles legacy
-    // categories that were created before notebookId was tracked on categories).
-    const visibleCategories = this._categories.filter(category => {
-      if (category.notebookId && category.notebookId !== notebookId) return false;
-      const ids = this.getCategorySubtreeIds(category.id);
-      return [...ids].some(id => scopedNotes.some(n => n.category === id));
-    });
-
-    const renderCategory = (category) => {
-      const filter = this.getCategoryFilter(category.id);
-      const active = this.currentFilter === filter;
-      const count = this.countCategoryNotes(category.id, scopedNotes);
-      const children = visibleCategories.filter(child => child.parentId === category.id);
-      const childActive = children.some(child => this.currentFilter === this.getCategoryFilter(child.id));
-      const notebookLabel = this.getCategoryNotebookLabel(category)
-        ? `<span class="sidebar__category-notebook">${this.escapeHTML(this.getCategoryNotebookLabel(category))}</span>`
-        : '';
-      return `<div class="sidebar__category-group ${children.length && (active || childActive) ? 'sidebar__category-group--active' : ''}">
-        <a class="sidebar__item sidebar__category ${active ? 'sidebar__item--active' : ''}" data-filter="${this.escapeHTML(filter)}" data-action="set-filter">
-          <svg class="sidebar__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h5l2 3h11v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 7V5a2 2 0 0 1 2-2h4l2 4"/></svg>
-          <span class="sidebar__item-text">${this.escapeHTML(category.label)}</span>
-          ${notebookLabel}
-          ${children.length ? '<span class="sidebar__category-chevron" aria-hidden="true">›</span>' : ''}
-          <span class="sidebar__count">${count}</span>
-          ${isEditor ? `<span class="sidebar__item-actions">
-            <button class="sidebar__icon-btn" type="button" title="重命名分类" data-action="rename-category" data-id="${this.escapeHTML(category.id)}">✎</button>
-            <button class="sidebar__icon-btn" type="button" title="添加子分类" data-action="add-subcategory" data-id="${this.escapeHTML(category.id)}">＋</button>
-            <button class="sidebar__icon-btn sidebar__icon-btn--danger" type="button" title="删除分类" data-action="delete-category" data-id="${this.escapeHTML(category.id)}">×</button>
-          </span>` : ''}
-        </a>${children.length ? `<div class="sidebar__category-children">${children.map(renderCategory).join('')}</div>` : ''}</div>`;
-    };
-
-    const roots = visibleCategories.filter(category => !category.parentId || !visibleCategories.some(parent => parent.id === category.parentId));
-    container.innerHTML = roots.map(renderCategory).join('');
-  },
-
-  async addCategory() {
-    if (this.role !== 'editor') { this.toast('需要编辑密码'); return; }
-    const label = prompt('请输入新分类名称：', '新分类');
-    if (!label || !label.trim()) return;
-    try {
-      const notebookId = this.getCurrentNotebookId();
-      const category = await this.api('POST', apiPath('/categories'), { label: label.trim(), parentId: null, notebookId });
-      await this.reloadCategories();
-      this.renderCategories();
-      this.renderMobileFilters();
-      this.setFilter(this.getCategoryFilter(category.id));
-      this.toast('分类已添加');
-    } catch (e) { this.toast(e.message); }
-  },
-
-  async addSubcategory(parentId) {
-    if (this.role !== 'editor') { this.toast('需要管理员登录'); return; }
-    const parent = this.getCategoryById(parentId);
-    if (!parent) return;
-    const label = prompt(`请输入"${parent.label}"下的子分类名称：`, '新子分类');
-    if (!label || !label.trim()) return;
-    try {
-      const notebookId = this.getCurrentNotebookId();
-      const category = await this.api('POST', apiPath('/categories'), { label: label.trim(), parentId, notebookId });
-      await this.reloadCategories(); this.renderCategories(); this.renderMobileFilters();
-      this.setFilter(this.getCategoryFilter(category.id)); this.toast('子分类已添加');
-    } catch (e) { this.toast(e.message); }
-  },
-
-  async renameCategory(id) {
-    if (this.role !== 'editor') { this.toast('需要编辑密码'); return; }
-    const category = this.getCategoryById(id);
-    if (!category) return;
-    const label = prompt('请输入新的分类名称：', category.label);
-    if (!label || !label.trim() || label.trim() === category.label) return;
-    try {
-      await this.api('PUT', apiPath('/categories/' + encodeURIComponent(id)), { label: label.trim(), notebookId: category.notebookId });
-      await this.reloadCategories();
-      this.renderCategories();
-      this.renderMobileFilters();
-      this.renderNotes();
-      this.toast('分类已更新');
-    } catch (e) { this.toast(e.message); }
-  },
-
-  async deleteCategory(id) {
-    if (this.role !== 'editor') { this.toast('需要编辑密码'); return; }
-    const category = this.getCategoryById(id);
-    if (!category) return;
-    if (!confirm(`确定要删除分类"${category.label}"吗？其中的笔记会移到剩余分类。`)) return;
-    try {
-      await this.api('DELETE', apiPath('/categories/' + encodeURIComponent(id)));
-      await this.reloadCategories();
-      await this.reloadNotes();
-      if (this.currentFilter === this.getCategoryFilter(id)) this.currentFilter = 'all';
-      this.renderCategories();
-      this.renderTags();
-      this.updateCounts();
-      this.renderNotes();
-      this.toast('分类已删除');
-    } catch (e) { this.toast(e.message); }
+    container.innerHTML = entries.map(renderEntry).join('');
   },
 
   renderMobileFilters() {
@@ -347,25 +218,28 @@ export const categoryMethods = {
     // Build visible category items.
     const categoryItems = [];
     if (isDocsView) {
-      // Group by label across all notebooks.
-      const labelGroups = new Map();
+      // Group by (label, notebookScope): same-label categories merge into one entry.
+      // Global (notebookId=null) and bound categories are separate groups.
+      const groupMap = new Map();
       this._categories.forEach(cat => {
         const ids = this.getCategorySubtreeIds(cat.id);
         const matches = [...ids].filter(id => scopedNotes.some(n => n.category === id));
         if (matches.length === 0) return;
-        const existing = labelGroups.get(cat.label) || { label: cat.label, count: 0, ids: new Set(), notebookLabel: null };
+        const scope = cat.notebookId || null;
+        const key = `${cat.label}|||${scope}`;
+        const existing = groupMap.get(key) || { label: cat.label, scope, count: 0, ids: new Set() };
         existing.count += this.countCategoryNotes(cat.id, scopedNotes);
         matches.forEach(m => existing.ids.add(m));
-        if (!existing.notebookLabel && cat.notebookId) {
-          existing.notebookLabel = this._menus.find(m => m.id === cat.notebookId)?.label || null;
-        }
-        labelGroups.set(cat.label, existing);
+        groupMap.set(key, existing);
       });
-      labelGroups.forEach((group, label) => {
+      [...groupMap.values()].sort((a, b) => a.label.localeCompare(b.label, 'zh-CN')).forEach(group => {
         const sampleId = [...group.ids][0];
+        const notebookTag = group.scope
+          ? ` — ${this._menus.find(m => m.id === group.scope)?.label || group.scope}`
+          : '';
         categoryItems.push({
           filter: this.getCategoryFilter(sampleId),
-          label: `${group.notebookLabel ? `— ${group.notebookLabel}` : ''}${label}`.trimStart(),
+          label: `${group.label}${notebookTag}`.trimEnd(),
           count: group.count,
         });
       });

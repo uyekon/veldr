@@ -25,8 +25,16 @@ export const notesViewMethods = {
     if (this.currentFilter === 'star') notes = notes.filter(n => n.starred);
     else if (this.isCategoryFilter(this.currentFilter)) {
       const categoryId = this.getCategoryIdFromFilter(this.currentFilter);
-      const subtreeIds = this.getCategorySubtreeIds(categoryId);
-      notes = notes.filter(n => subtreeIds.has(n.category));
+      // In docs view, clicking a merged category group should show notes from
+      // ALL participating categories (same label, same notebook scope).
+      const refCat = this._categories.find(c => c.id === categoryId);
+      const allGroupIds = refCat
+        ? this._categories
+            .filter(c => c.label === refCat.label && (c.notebookId || null) === (refCat.notebookId || null))
+            .flatMap(c => this.getCategorySubtreeIds(c.id))
+        : [];
+      const uniqueIds = new Set(allGroupIds.length ? allGroupIds : this.getCategorySubtreeIds(categoryId));
+      notes = notes.filter(n => uniqueIds.has(n.category));
     }
     else if (this.currentFilter.startsWith('tag:')) {
       const tag = this.currentFilter.slice(4);

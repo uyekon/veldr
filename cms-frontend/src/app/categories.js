@@ -212,6 +212,71 @@ export const categoryMethods = {
     container.innerHTML = entries.map(renderEntry).join('');
   },
 
+  _renderCategoriesNotebookView(container, isEditor, scopedNotes, notebookId) {
+    // Notebook view: only show categories assigned to this notebook.
+    // Root categories (parentId === null) whose notebookId includes the current notebook.
+    // Fall back to global categories (notebookId empty) if no notebook-bound ones match.
+    const scopedCategoryIds = new Set(scopedNotes.map(n => n.category));
+
+    // Filter root categories relevant to this notebook
+    let roots = this._categories.filter(c => !c.parentId);
+    const notebookRoots = roots.filter(c => Array.isArray(c.notebookId) && c.notebookId.includes(notebookId));
+    const usedRoots = notebookRoots.length > 0 ? notebookRoots : roots.filter(c => !Array.isArray(c.notebookId) || c.notebookId.length === 0);
+
+    // Only include roots that have notes in scope
+    const visibleRoots = usedRoots.filter(cat => {
+      const subtreeIds = this.getCategorySubtreeIds(cat.id);
+      return [...subtreeIds].some(id => scopedCategoryIds.has(id));
+    }).sort((a, b) => a.label.localeCompare(b.label, 'zh-CN'));
+
+    const renderCategory = (cat, depth = 0) => {
+      const filter = this.getCategoryFilter(cat.id);
+      const active = this.currentFilter === filter;
+      const count = this.countCategoryNotes(cat.id, scopedNotes);
+      const children = this.getChildrenOf(cat.id).filter(child => {
+        const cIds = this.getCategorySubtreeIds(child.id);
+        return [...cIds].some(id => scopedCategoryIds.has(id));
+      });
+      const hasChildren = children.length > 0;
+      const childActive = children.some(c => this.currentFilter === this.getCategoryFilter(c.id));
+      const indent = depth > 0 ? `padding-left:${12 + depth * 16}px` : '';
+      const actions = isEditor ? `<span class="sidebar__item-actions">
+        <button class="sidebar__icon-btn" type="button" title="重命名分类" data-action="rename-category" data-id="${this.escapeHTML(cat.id)}">✎</button>
+        ${depth === 0 ? `<button class="sidebar__icon-btn" type="button" title="添加子分类" data-action="add-subcategory" data-id="${this.escapeHTML(cat.id)}">＋</button>` : ''}
+        <button class="sidebar__icon-btn sidebar__icon-btn--danger" type="button" title="删除分类" data-action="delete-category" data-id="${this.escapeHTML(cat.id)}">×</button>
+      </span>` : '';
+      const childrenHtml = hasChildren
+        ? `<div class="sidebar__category-children ${active || childActive ? 'sidebar__category-children--open' : ''}">${children.map(c => renderCategory(c, depth + 1)).join('')}</div>`
+        : '';
+      return `<div class="sidebar__category-group ${hasChildren && (active || childActive) ? 'sidebar__category-group--active' : ''}">
+        <a class="sidebar__item sidebar__category ${active ? 'sidebar__item--active' : ''}" data-filter="${this.escapeHTML(filter)}" data-action="set-filter" ${indent ? `style="${indent}"` : ''}>
+          <svg class="sidebar__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h5l2 3h11v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 7V5a2 2 0 0 1 2-2h4l2 4"/></svg>
+          <span class="sidebar__item-text">${this.escapeHTML(cat.label)}</span>
+          ${hasChildren ? '<span class="sidebar__category-chevron" aria-hidden="true">›</span>' : ''}
+          <span class="sidebar__count">${count}</span>
+          ${actions}
+        </a>${childrenHtml}</div>`;
+    };
+
+    if (visibleRoots.length === 0) {
+      container.innerHTML = '<div style="padding:var(--s2) var(--s6);font-size:.8125rem;color:var(--c400)">此笔记本暂无分类</div>';
+    } else {
+      container.innerHTML = visibleRoots.map(cat => renderCategory(cat)).join('');
+    }
+  },
+
+  _renderChildLink(childId, scopedNotes) {
+    const cat = this.getCategoryById(childId);
+    if (!cat) return '';
+    const filter = this.getCategoryFilter(cat.id);
+    const active = this.currentFilter === filter;
+    const count = this.countCategoryNotes(cat.id, scopedNotes);
+    return `<a class="sidebar__item sidebar__category sidebar__category--child ${active ? 'sidebar__item--active' : ''}" data-filter="${this.escapeHTML(filter)}" data-action="set-filter">
+      <span class="sidebar__item-text">${this.escapeHTML(cat.label)}</span>
+      <span class="sidebar__count">${count}</span>
+    </a>`;
+  },
+
   renderMobileFilters() {
     const list = document.getElementById('mobileFilterList');
     if (!list) return;

@@ -45,9 +45,9 @@ const legacyWhiteboard = (whiteboard) => ({
 const defaultDB = () => ({
   notes: [],
   categories: [
-    { id: 'work', label: '工作', notebookId: null },
-    { id: 'learn', label: '学习', notebookId: null },
-    { id: 'uncategorized', label: '未分类', notebookId: null },
+    { id: 'work', label: '工作', notebookId: [] },
+    { id: 'learn', label: '学习', notebookId: [] },
+    { id: 'uncategorized', label: '未分类', notebookId: [] },
   ],
   menus: [
     { id: 'docs', label: 'Docs', type: 'docs' },
@@ -90,7 +90,11 @@ const loadDB = async () => {
   if (!Array.isArray(db.notes)) db.notes = [];
   db.notes = db.notes.map(note => ({ ...note, desc: typeof note.desc === 'string' ? note.desc : '' }));
   if (!Array.isArray(db.categories)) db.categories = defaultDB().categories;
-  db.categories = db.categories.map(category => ({ ...category, parentId: category.parentId || null, notebookId: typeof category.notebookId === 'string' ? category.notebookId : null }));
+  db.categories = db.categories.map(category => {
+  const nb = category.notebookId;
+  const notebookId = Array.isArray(nb) ? nb : (typeof nb === 'string' && nb ? [nb] : []);
+  return { ...category, parentId: category.parentId || null, notebookId };
+});
   if (!Array.isArray(db.menus)) db.menus = [];
   normalizeWhiteboards(db);
   if (!Array.isArray(db.media)) db.media = [];

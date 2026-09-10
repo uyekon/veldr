@@ -238,14 +238,14 @@ router.post('/notes', editor, asyncHandler(async (req, res) => {
     updatedAt: timestamp,
   };
 
-  // Sync category.notebookId to this note's notebook when saving.
-  // A category is bound only if all existing notes with it are in the same notebook;
-  // otherwise it stays global (null).
+  // Add this note's notebook to category's notebookId array.
   const catIdx = db.categories.findIndex(c => c.id === note.category);
   if (catIdx !== -1) {
-    const usedIn = new Set(db.notes.map(n => n.notebookId || null));
-    const allSameNB = usedIn.size <= 1;
-    db.categories[catIdx] = { ...db.categories[catIdx], notebookId: allSameNB ? (note.notebookId || null) : null };
+    const currentNbs = db.categories[catIdx].notebookId || [];
+    const nb = note.notebookId;
+    if (nb && !currentNbs.includes(nb)) {
+      db.categories[catIdx] = { ...db.categories[catIdx], notebookId: [...currentNbs, nb] };
+    }
   }
   db.notes.unshift(note);
   await persistDB();
@@ -291,12 +291,14 @@ router.put('/notes/:id', editor, asyncHandler(async (req, res) => {
   };
 
   db.notes[index] = updated;
-  // Sync category.notebookId when the note's category/notebook pair changes.
+  // Add the note's notebook to category's notebookId array.
   const upCatIdx = db.categories.findIndex(c => c.id === updated.category);
   if (upCatIdx !== -1) {
-    const usedIn = new Set(db.notes.map(n => n.notebookId || null));
-    const allSameNB = usedIn.size <= 1;
-    db.categories[upCatIdx] = { ...db.categories[upCatIdx], notebookId: allSameNB ? (updated.notebookId || null) : null };
+    const currentNbs = db.categories[upCatIdx].notebookId || [];
+    const nb = updated.notebookId;
+    if (nb && !currentNbs.includes(nb)) {
+      db.categories[upCatIdx] = { ...db.categories[upCatIdx], notebookId: [...currentNbs, nb] };
+    }
   }
   await persistDB();
   await cleanupUnreferencedCmsUploads({ notes: db.notes, candidates: previousImages });
@@ -338,7 +340,10 @@ router.post('/categories', editor, asyncHandler(async (req, res) => {
   if (parentId && !db.categories.some(category => category.id === parentId)) {
     return send(res, 400, { error: 'Parent category not found' });
   }
-  const notebookId = req.body?.notebookId && String(req.body.notebookId).trim() ? String(req.body.notebookId) : null;
+  const rawNb = req.body?.notebookId;
+  const notebookId = rawNb
+    ? Array.isArray(rawNb) ? rawNb.filter(Boolean).map(String) : [String(rawNb).trim()].filter(Boolean)
+    : [];
   const category = { id, label, parentId, notebookId };
   db.categories.push(category);
   await persistDB();
@@ -357,7 +362,10 @@ router.put('/categories/:id', editor, asyncHandler(async (req, res) => {
   if (parentId && (parentId === req.params.id || !db.categories.some(category => category.id === parentId))) {
     return send(res, 400, { error: 'Invalid parent category' });
   }
-  const notebookId = req.body?.notebookId === undefined ? db.categories[index].notebookId || null : (req.body.notebookId ? String(req.body.notebookId) : null);
+  const rawNb = req.body?.notebookId;
+  const notebookId = rawNb === undefined
+    ? (db.categories[index].notebookId || [])
+    : Array.isArray(rawNb) ? rawNb.filter(Boolean).map(String) : [String(rawNb).trim()].filter(Boolean);
   db.categories[index] = { ...db.categories[index], label, parentId, notebookId };
   await persistDB();
   return send(res, 200, db.categories[index]);
@@ -435,7 +443,7 @@ router.delete('/menus/:id', editor, asyncHandler(async (req, res) => {
   db.menus = db.menus.filter(menu => menu.id !== id);
   if (db.menus.length === before) return send(res, 404, { error: 'Menu not found' });
   db.notes = db.notes.map(note => (
-    note.notebookId === id ? { ...note, notebookId: null } : note
+    note.notebookId === id ? { ...note, notebookId: [] } : note
   ));
   await persistDB();
   return send(res, 200, { ok: true });

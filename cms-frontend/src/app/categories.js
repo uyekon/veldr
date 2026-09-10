@@ -46,8 +46,10 @@ export const categoryMethods = {
   },
 
   getCategoryNotebookLabel(category) {
-    if (!category?.notebookId) return '';
-    return this._menus.find(m => m.id === category.notebookId)?.label || null;
+    if (!category?.notebookId?.length) return [];
+    return category.notebookId
+      .map(nb => this._menus.find(m => m.id === nb)?.label || nb)
+      .filter(Boolean);
   },
 
   // Direct children of a category from the full list
@@ -72,7 +74,7 @@ export const categoryMethods = {
     // fall back to all globally-scoped categories if none match.
     let roots = this._categories.filter(category => !category.parentId);
     if (notebookId) {
-      const notebookCats = roots.filter(c => c.notebookId === notebookId);
+      const notebookCats = roots.filter(c => Array.isArray(c.notebookId) && c.notebookId.includes(notebookId));
       if (notebookCats.length > 0) roots = notebookCats;
     }
     select.innerHTML = roots.map(category => (
@@ -182,7 +184,7 @@ export const categoryMethods = {
       const notebookLabel = group.ids.size > 0
         ? (() => {
             const catsInGroup = [...group.ids].map(id => this._categories.find(c => c.id === id)).filter(Boolean);
-            const boundCats = catsInGroup.filter(c => c.notebookId);
+            const boundCats = catsInGroup.filter(c => Array.isArray(c.notebookId) && c.notebookId.length > 0);
             return boundCats.length
               ? `<span class="sidebar__category-notebook">${boundCats.map(c => this.escapeHTML(this._menus.find(m => m.id === c.notebookId)?.label || c.notebookId)).join(', ')}</span>`
               : '';
@@ -230,7 +232,7 @@ export const categoryMethods = {
         const existing = groupMap.get(cat.label) || { label: cat.label, count: 0, ids: new Set(), notebookIds: new Set() };
         existing.count += this.countCategoryNotes(cat.id, scopedNotes);
         matches.forEach(m => existing.ids.add(m));
-        if (cat.notebookId) existing.notebookIds.add(cat.notebookId);
+        if (Array.isArray(cat.notebookId)) cat.notebookId.forEach(nb => existing.notebookIds.add(nb));
         groupMap.set(cat.label, existing);
       });
       [...groupMap.values()].sort((a, b) => a.label.localeCompare(b.label, 'zh-CN')).forEach(group => {
@@ -248,7 +250,7 @@ export const categoryMethods = {
       // Notebook view: only show categories belonging to current notebook.
       this._categories
         .filter(cat => {
-          if (notebookId && cat.notebookId !== notebookId) return false;
+          if (notebookId && !(Array.isArray(cat.notebookId) && cat.notebookId.includes(notebookId))) return false;
           const ids = this.getCategorySubtreeIds(cat.id);
           return [...ids].some(id => scopedNotes.some(n => n.category === id));
         })

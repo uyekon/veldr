@@ -820,7 +820,10 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
       </div>
       <div style="display:flex;gap:var(--s5)">
         <div class="modal__field" style="flex:1">
-          <label class="modal__label">分类</label>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--s2)">
+            <label class="modal__label">分类</label>
+            <button class="modal__tool-btn" type="button" data-action="add-category">+ 新建分类</button>
+          </div>
           <select class="modal__select" id="noteCategory">
             <option value="work">工作</option>
             <option value="learn">学习</option>

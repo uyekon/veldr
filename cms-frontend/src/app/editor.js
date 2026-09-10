@@ -83,7 +83,6 @@ export const editorMethods = {
       document.getElementById('modalTitle').textContent = '编辑笔记';
       document.getElementById('modalSaveBtn').textContent = '更新笔记';
       titleEl.value = existingNote.title;
-      this.setCategorySelection(existingNote.category);
       tagsEl.value = (existingNote.tags || []).join(', ');
       if (descEl) descEl.value = existingNote.desc || '';
       content = existingNote.content || '';
@@ -93,13 +92,13 @@ export const editorMethods = {
       document.getElementById('modalTitle').textContent = '新建笔记';
       document.getElementById('modalSaveBtn').textContent = '保存笔记';
       titleEl.value = '';
-      this.setCategorySelection(this.getDefaultCategoryId());
       tagsEl.value = '';
       if (descEl) descEl.value = '';
       deleteBtn.style.display = 'none';
     }
     this.draftNotebookId = existingNote?.notebookId ?? this.getCurrentNotebookId();
     this.ensureNotebookOptions(this.draftNotebookId);
+    this.setCategorySelection(existingNote?.category || this.getDefaultCategoryId(), this.draftNotebookId);
 
     modal.classList.add('modal-overlay--active');
     this.autosaveDirty = false;
@@ -223,9 +222,10 @@ export const editorMethods = {
     this.suppressAutosave = true;
     document.getElementById('noteTitle').value = draft.title;
     document.getElementById('noteDesc').value = draft.desc || '';
-    this.setCategorySelection(draft.category || this.getDefaultCategoryId());
-    document.getElementById('noteTags').value = (draft.tags || []).join(', ');
     this.draftNotebookId = draft.notebookId ?? this.draftNotebookId;
+    this.ensureNotebookOptions(this.draftNotebookId);
+    this.setCategorySelection(draft.category || this.getDefaultCategoryId(), this.draftNotebookId);
+    document.getElementById('noteTags').value = (draft.tags || []).join(', ');
     await this.setEditorMarkdown(draft.content);
     this.setEditorMode('write');
     this.suppressAutosave = false;
@@ -472,12 +472,12 @@ export const editorMethods = {
     if (!note) return;
     this.suppressAutosave = true;
     document.getElementById('noteTitle').value = note.title || '';
-    this.setCategorySelection(note.category || this.getDefaultCategoryId());
+    this.draftNotebookId = note.notebookId || null;
+    this.ensureNotebookOptions(this.draftNotebookId);
+    this.setCategorySelection(note.category || this.getDefaultCategoryId(), this.draftNotebookId);
     document.getElementById('noteTags').value = (note.tags || []).join(', ');
     document.getElementById('noteDesc').value = note.desc || '';
     await this.setEditorMarkdown(note.content || '');
-    this.draftNotebookId = note.notebookId || null;
-    this.ensureNotebookOptions(this.draftNotebookId);
     this.editingNoteVersion = Number(note.version) || 1;
     this.autosaveDirty = false; this.conflictPending = false;
     this.suppressAutosave = false;

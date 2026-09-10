@@ -65,33 +65,39 @@ export const categoryMethods = {
     return String(filter || '').slice('category:'.length);
   },
 
-  ensureCategoryOptions(selectedId) {
+  ensureCategoryOptions(selectedId, targetNotebookId = this.draftNotebookId ?? this.getCurrentNotebookId()) {
     const select = document.getElementById('noteCategory');
     if (!select) return;
     const value = selectedId || select.value || this.getDefaultCategoryId();
-    const notebookId = this.getCurrentNotebookId();
-    // In a notebook view, only show categories assigned to that notebook;
-    // fall back to all globally-scoped categories if none match.
+    // The note editor may target a different notebook than the current page.
+    // Keep categories bound to that target plus global fallback categories.
     let roots = this._categories.filter(category => !category.parentId);
-    if (notebookId) {
-      const notebookCats = roots.filter(c => Array.isArray(c.notebookId) && c.notebookId.includes(notebookId));
-      if (notebookCats.length > 0) roots = notebookCats;
+    if (targetNotebookId) {
+      roots = roots.filter(category => (
+        !Array.isArray(category.notebookId) ||
+        category.notebookId.length === 0 ||
+        category.notebookId.includes(targetNotebookId)
+      ));
     }
     select.innerHTML = roots.map(category => (
       `<option value="${this.escapeHTML(category.id)}">${this.escapeHTML(category.label)}</option>`
     )).join('');
     const selected = this.getCategoryById(value);
-    select.value = selected?.parentId || (selected && !selected.parentId ? selected.id : this.getDefaultCategoryId());
-    this.syncSubcategoryOptions(value);
+    const rootId = selected?.parentId || (roots.some(category => category.id === selected?.id) ? selected.id : roots[0]?.id || '');
+    select.value = rootId;
+    this.syncSubcategoryOptions(selected?.id || rootId, targetNotebookId);
   },
 
-  syncSubcategoryOptions(selectedId) {
+  syncSubcategoryOptions(selectedId, targetNotebookId = this.draftNotebookId ?? this.getCurrentNotebookId()) {
     const parentSelect = document.getElementById('noteCategory');
     const childSelect = document.getElementById('noteSubcategory');
     if (!parentSelect || !childSelect) return;
     const selected = this.getCategoryById(selectedId || parentSelect.value);
     const parentId = selected?.parentId || parentSelect.value;
-    const children = this._categories.filter(category => category.parentId === parentId);
+    const children = this._categories.filter(category => (
+      category.parentId === parentId &&
+      (!targetNotebookId || !Array.isArray(category.notebookId) || category.notebookId.length === 0 || category.notebookId.includes(targetNotebookId))
+    ));
     childSelect.innerHTML = `<option value="">${children.length ? '不使用子分类' : '无子分类'}</option>${children.map(category => `<option value="${this.escapeHTML(category.id)}">${this.escapeHTML(category.label)}</option>`).join('')}`;
     childSelect.disabled = children.length === 0;
     if (selected?.parentId === parentId) childSelect.value = selected.id;
@@ -101,9 +107,9 @@ export const categoryMethods = {
     return document.getElementById('noteSubcategory')?.value || document.getElementById('noteCategory')?.value || this.getDefaultCategoryId();
   },
 
-  setCategorySelection(id) {
-    this.ensureCategoryOptions(id);
-    this.syncSubcategoryOptions(id);
+  setCategorySelection(id, targetNotebookId) {
+    this.ensureCategoryOptions(id, targetNotebookId);
+    this.syncSubcategoryOptions(id, targetNotebookId);
   },
 
   ensureNotebookOptions(selectedId) {
@@ -218,15 +224,13 @@ export const categoryMethods = {
     // and by the notes actually present in the current notebook.
     const scopedCategoryIds = new Set(scopedNotes.map(n => n.category));
 
-    // Keep explicitly bound roots, but also include every root actually used
-    // by this notebook.  The latter makes old notes whose category binding has
-    // not yet been backfilled discoverable in the sidebar.
+    // A notebook sidebar is a navigation aid: omit categories with no article
+    // in this notebook, even when a category is explicitly bound to it.
     const roots = this._categories.filter(c => !c.parentId);
     const visibleRoots = roots.filter(cat => {
       const subtreeIds = this.getCategorySubtreeIds(cat.id);
       const isUsedByNotebook = [...subtreeIds].some(id => scopedCategoryIds.has(id));
-      const isBoundToNotebook = Array.isArray(cat.notebookId) && cat.notebookId.includes(notebookId);
-      return isBoundToNotebook || isUsedByNotebook;
+      return isUsedByNotebook;
     }).sort((a, b) => a.label.localeCompare(b.label, 'zh-CN'));
 
     const renderCategory = (cat, depth = 0) => {
@@ -389,12 +393,13 @@ export const categoryMethods = {
     this.closeMobileSheets();
     const label = prompt('请输入新分类名称：', '新分类');
     if (!label || !label.trim()) return;
-    const notebookId = this.getCurrentNotebookId();
+    const notebookId = this.draftNotebookId ?? this.getCurrentNotebookId();
     const body = { label: label.trim() };
     if (notebookId) body.notebookId = [notebookId];
     try {
-      await this.api('POST', apiPath('/categories'), body);
+      const category = await this.api('POST', apiPath('/categories'), body);
       await this.reloadCategories();
+      this.setCategorySelection(category.id, notebookId);
       this.renderCategories();
       this.renderMobileFilters();
       this.toast('分类已添加');

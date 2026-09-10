@@ -105,7 +105,11 @@ export function installDelegation(App) {
   bind('noteDesc', 'input', () => App.scheduleAutosave());
   bind('noteCategory', 'change', () => { App.syncSubcategoryOptions(); App.scheduleAutosave(); });
   bind('noteSubcategory', 'change', () => App.scheduleAutosave());
-  bind('noteNotebook', 'change', (e) => { App.draftNotebookId = e.target.value || null; App.setCategorySelection(App.draftNotebookId); App.scheduleAutosave(); });
+  bind('noteNotebook', 'change', (e) => {
+    App.draftNotebookId = e.target.value || null;
+    App.setCategorySelection(document.getElementById('noteCategory')?.value, App.draftNotebookId);
+    App.scheduleAutosave();
+  });
   document.addEventListener('change', (e) => {
     if (e.target?.id === 'notesSort') { App.notesSort = e.target.value; App.renderNotes(); }
   });

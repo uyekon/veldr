@@ -3,11 +3,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 const originalWindow = globalThis.window;
 const originalDocument = globalThis.document;
 const originalConfirm = globalThis.confirm;
+const originalPrompt = globalThis.prompt;
 
 afterEach(() => {
   globalThis.window = originalWindow;
   globalThis.document = originalDocument;
   globalThis.confirm = originalConfirm;
+  globalThis.prompt = originalPrompt;
 });
 
 describe('notebook category sidebar', () => {
@@ -26,6 +28,7 @@ describe('notebook category sidebar', () => {
       _categories: [
         { id: 'makm', label: 'MakM', parentId: null, notebookId: [] },
         { id: 'life', label: 'life', parentId: null, notebookId: ['todo'] },
+        { id: 'empty', label: 'Empty', parentId: null, notebookId: [notebookId] },
       ],
       _notes: [{ id: 1, notebookId, category: 'makm' }, { id: 2, notebookId, category: 'life' }],
       escapeHTML: (value) => String(value),
@@ -38,6 +41,7 @@ describe('notebook category sidebar', () => {
 
     expect(categoryList.innerHTML).toContain('MakM');
     expect(categoryList.innerHTML).toContain('life');
+    expect(categoryList.innerHTML).not.toContain('Empty');
   });
 
   it('renders Docs categories without treating a Set as an array', async () => {
@@ -82,6 +86,29 @@ describe('notebook category sidebar', () => {
     await app.deleteCategory('makm');
 
     expect(calls).toEqual([['DELETE', '/api/cms/categories/makm']]);
+  });
+
+  it('creates a category for the notebook selected in the editor', async () => {
+    globalThis.window = { CMS_CONFIG: {} };
+    globalThis.prompt = () => 'New category';
+    const { categoryMethods } = await import('./app/categories.js');
+    const calls = [];
+    const selected = [];
+    const app = {
+      ...categoryMethods,
+      role: 'editor', draftNotebookId: 'methods', currentNav: 'docs',
+      closeMobileSheets() {},
+      getCurrentNotebookId: () => null,
+      api: async (...args) => { calls.push(args); return { id: 'new-category' }; },
+      reloadCategories: async () => {},
+      setCategorySelection: (...args) => selected.push(args),
+      renderCategories() {}, renderMobileFilters() {}, toast() {},
+    };
+
+    await app.addCategory();
+
+    expect(calls).toEqual([['POST', '/api/cms/categories', { label: 'New category', notebookId: ['methods'] }]]);
+    expect(selected).toEqual([['new-category', 'methods']]);
   });
 
   it('filters notes by the selected Docs category', async () => {

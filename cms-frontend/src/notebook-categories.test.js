@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 const originalWindow = globalThis.window;
 const originalDocument = globalThis.document;
+const originalConfirm = globalThis.confirm;
 
 afterEach(() => {
   globalThis.window = originalWindow;
   globalThis.document = originalDocument;
+  globalThis.confirm = originalConfirm;
 });
 
 describe('notebook category sidebar', () => {
@@ -59,5 +61,26 @@ describe('notebook category sidebar', () => {
 
     expect(() => app.renderCategories()).not.toThrow();
     expect(categoryList.innerHTML).toContain('MakM');
+  });
+
+  it('deletes a category through the CMS API when the sidebar action is used', async () => {
+    globalThis.window = { CMS_CONFIG: {} };
+    globalThis.confirm = () => true;
+    const { categoryMethods } = await import('./app/categories.js');
+    const calls = [];
+    const app = {
+      ...categoryMethods,
+      role: 'editor',
+      _categories: [{ id: 'makm', label: 'MakM', parentId: null, notebookId: [] }],
+      closeMobileSheets() {},
+      api: async (...args) => { calls.push(args); },
+      reloadCategories: async () => {},
+      reloadNotes: async () => {},
+      renderCategories() {}, renderMobileFilters() {}, updateCounts() {}, toast() {},
+    };
+
+    await app.deleteCategory('makm');
+
+    expect(calls).toEqual([['DELETE', '/api/cms/categories/makm']]);
   });
 });

@@ -381,4 +381,75 @@ export const categoryMethods = {
     `).join('');
     this.renderMobileTags();
   },
+
+  // ===== 分类 CRUD =====
+
+  async addCategory() {
+    if (this.role !== 'editor') { this.toast('需要编辑密码'); return; }
+    this.closeMobileSheets();
+    const label = prompt('请输入新分类名称：', '新分类');
+    if (!label || !label.trim()) return;
+    const notebookId = this.getCurrentNotebookId();
+    const body = { label: label.trim() };
+    if (notebookId) body.notebookId = [notebookId];
+    try {
+      await this.api('POST', apiPath('/categories'), body);
+      await this.reloadCategories();
+      this.renderCategories();
+      this.renderMobileFilters();
+      this.toast('分类已添加');
+    } catch (e) { this.toast(e.message); }
+  },
+
+  async addSubcategory(parentId) {
+    if (this.role !== 'editor') { this.toast('需要编辑密码'); return; }
+    const parent = this.getCategoryById(parentId);
+    if (!parent) return;
+    this.closeMobileSheets();
+    const label = prompt(`在「${parent.label}」下添加子分类：`, '新子分类');
+    if (!label || !label.trim()) return;
+    try {
+      await this.api('POST', apiPath('/categories'), {
+        label: label.trim(),
+        parentId: parent.id,
+        notebookId: parent.notebookId || [],
+      });
+      await this.reloadCategories();
+      this.renderCategories();
+      this.renderMobileFilters();
+      this.toast('子分类已添加');
+    } catch (e) { this.toast(e.message); }
+  },
+
+  async renameCategory(id) {
+    if (this.role !== 'editor') { this.toast('需要编辑密码'); return; }
+    const cat = this.getCategoryById(id);
+    if (!cat) return;
+    this.closeMobileSheets();
+    const label = prompt('请输入新的分类名称：', cat.label);
+    if (!label || !label.trim() || label.trim() === cat.label) return;
+    try {
+      await this.api('PUT', apiPath('/categories/' + id), { label: label.trim() });
+      await this.reloadCategories();
+      this.renderCategories();
+      this.renderMobileFilters();
+      this.toast('分类已重命名');
+    } catch (e) { this.toast(e.message); }
+  },
+
+  async deleteCategory(id) {
+    if (this.role !== 'editor') { this.toast('需要编辑密码'); return; }
+    const cat = this.getCategoryById(id);
+    if (!cat) return;
+    this.closeMobileSheets();
+    if (!confirm(`确定要删除分类「${cat.label}」吗？该分类下的笔记将移至「未分类」。`)) return;
+    try {
+      await this.api('DELETE', apiPath('/categories/' + id));
+      await Promise.all([this.reloadCategories(), this.reloadNotes()]);
+      this.renderCategories();
+      this.renderMobileFilters();
+      this.updateCounts();
+      this.toast('分类已删除');
+    } catch (e) { this.toast(e.message); }
+  },
 };

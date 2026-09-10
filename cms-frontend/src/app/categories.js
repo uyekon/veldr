@@ -144,18 +144,14 @@ export const categoryMethods = {
     // Filtering on any merged group shows notes from all participating categories.
     const scopedCategoryIds = new Set(scopedNotes.map(n => n.category));
 
-    // Group categories by (label, notebookScope):
-    //   notebookScope = null for global, or the notebook id for bound categories.
-    const groupMap = new Map(); // key: "label|||notebookScope" -> merged group
+    // Group by label: all categories with the same label merge into one entry.
+    const groupMap = new Map(); // key: label -> merged group (all same-label categories)
     this._categories.forEach(cat => {
       const subtreeIds = this.getCategorySubtreeIds(cat.id);
       const matches = [...subtreeIds].filter(id => scopedCategoryIds.has(id));
       if (matches.length === 0) return;
-      const scope = cat.notebookId || null;
-      const key = `${cat.label}|||${scope}`;
-      const group = groupMap.get(key) || {
+      const group = groupMap.get(cat.label) || {
         label: cat.label,
-        scope, // null = global, string = notebookId
         ids: new Set(),
         count: 0,
         children: new Set(),
@@ -169,7 +165,7 @@ export const categoryMethods = {
           group.children.add(child.id);
         }
       });
-      groupMap.set(key, group);
+      groupMap.set(cat.label, group);
     });
 
     // Build display list sorted by label.
@@ -183,8 +179,14 @@ export const categoryMethods = {
       const active = this.currentFilter === filter ||
         [...group.ids].some(id => this.currentFilter === this.getCategoryFilter(id)) ||
         group.children.some(c => this.currentFilter === this.getCategoryFilter(c.id));
-      const notebookLabel = group.scope
-        ? `<span class="sidebar__category-notebook">${this.escapeHTML(this._menus.find(m => m.id === group.scope)?.label || group.scope)}</span>`
+      const notebookLabel = group.ids.size > 0
+        ? (() => {
+            const catsInGroup = [...group.ids].map(id => this._categories.find(c => c.id === id)).filter(Boolean);
+            const boundCats = catsInGroup.filter(c => c.notebookId);
+            return boundCats.length
+              ? `<span class="sidebar__category-notebook">${boundCats.map(c => this.escapeHTML(this._menus.find(m => m.id === c.notebookId)?.label || c.notebookId)).join(', ')}</span>`
+              : '';
+          })()
         : '';
       const childrenHtml = group.children.size > 0
         ? `<div class="sidebar__category-children">${[...group.children].map(c => this._renderChildLink(c, scopedNotes)).join('')}</div>`
@@ -218,24 +220,23 @@ export const categoryMethods = {
     // Build visible category items.
     const categoryItems = [];
     if (isDocsView) {
-      // Group by (label, notebookScope): same-label categories merge into one entry.
-      // Global (notebookId=null) and bound categories are separate groups.
+      // Group by label: all categories with the same label merge into one entry.
+      // Show notebook badge(s) if any participating category is bound.
       const groupMap = new Map();
       this._categories.forEach(cat => {
         const ids = this.getCategorySubtreeIds(cat.id);
         const matches = [...ids].filter(id => scopedNotes.some(n => n.category === id));
         if (matches.length === 0) return;
-        const scope = cat.notebookId || null;
-        const key = `${cat.label}|||${scope}`;
-        const existing = groupMap.get(key) || { label: cat.label, scope, count: 0, ids: new Set() };
+        const existing = groupMap.get(cat.label) || { label: cat.label, count: 0, ids: new Set(), notebookIds: new Set() };
         existing.count += this.countCategoryNotes(cat.id, scopedNotes);
         matches.forEach(m => existing.ids.add(m));
-        groupMap.set(key, existing);
+        if (cat.notebookId) existing.notebookIds.add(cat.notebookId);
+        groupMap.set(cat.label, existing);
       });
       [...groupMap.values()].sort((a, b) => a.label.localeCompare(b.label, 'zh-CN')).forEach(group => {
         const sampleId = [...group.ids][0];
-        const notebookTag = group.scope
-          ? ` — ${this._menus.find(m => m.id === group.scope)?.label || group.scope}`
+        const notebookTag = group.notebookIds.size > 0
+          ? ` — ${[...group.notebookIds].map(nb => this._menus.find(m => m.id === nb)?.label || nb).join(', ')}`
           : '';
         categoryItems.push({
           filter: this.getCategoryFilter(sampleId),

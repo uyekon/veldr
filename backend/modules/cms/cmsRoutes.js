@@ -277,7 +277,7 @@ router.put('/notes/:id', editor, asyncHandler(async (req, res) => {
     ...current,
     title: body.title !== undefined ? String(body.title) : current.title,
     category: body.category !== undefined ? body.category : current.category,
-    notebookId: body.notebookId !== undefined ? body.notebookId || null : current.notebookId || null,
+    notebookId: body.notebookId !== undefined ? (body.notebookId && String(body.notebookId).trim()) || null : current.notebookId || null,
     tags: body.tags !== undefined ? normalizeTags(body.tags) : current.tags,
     content,
     excerpt: body.excerpt !== undefined ? body.excerpt : (body.content !== undefined ? markdownExcerpt(content) : current.excerpt),
@@ -443,7 +443,7 @@ router.delete('/menus/:id', editor, asyncHandler(async (req, res) => {
   db.menus = db.menus.filter(menu => menu.id !== id);
   if (db.menus.length === before) return send(res, 404, { error: 'Menu not found' });
   db.notes = db.notes.map(note => (
-    note.notebookId === id ? { ...note, notebookId: [] } : note
+    note.notebookId === id ? { ...note, notebookId: null } : note
   ));
   await persistDB();
   return send(res, 200, { ok: true });

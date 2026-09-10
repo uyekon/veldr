@@ -180,7 +180,7 @@ export const categoryMethods = {
       // Active if any participating category or its children is active.
       const active = this.currentFilter === filter ||
         [...group.ids].some(id => this.currentFilter === this.getCategoryFilter(id)) ||
-        group.children.some(c => this.currentFilter === this.getCategoryFilter(c.id));
+        [...group.children].some(id => this.currentFilter === this.getCategoryFilter(id));
       const notebookLabel = group.ids.size > 0
         ? (() => {
             const catsInGroup = [...group.ids].map(id => this._categories.find(c => c.id === id)).filter(Boolean);

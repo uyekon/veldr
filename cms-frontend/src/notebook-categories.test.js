@@ -37,4 +37,27 @@ describe('notebook category sidebar', () => {
     expect(categoryList.innerHTML).toContain('MakM');
     expect(categoryList.innerHTML).toContain('life');
   });
+
+  it('renders Docs categories without treating a Set as an array', async () => {
+    globalThis.window = { CMS_CONFIG: {} };
+    const { categoryMethods } = await import('./app/categories.js');
+    const categoryList = { innerHTML: '' };
+    globalThis.document = {
+      getElementById: (id) => ({ categoryList, addCategoryBtn: { style: {} } }[id] || null),
+    };
+    const app = {
+      ...categoryMethods,
+      role: 'viewer', currentNav: 'docs', currentFilter: 'all',
+      _menus: [{ id: 'docs', label: 'Docs', type: 'docs' }],
+      _categories: [{ id: 'makm', label: 'MakM', parentId: null, notebookId: [] }],
+      _notes: [{ id: 1, notebookId: 'methods', category: 'makm' }],
+      escapeHTML: (value) => String(value),
+      getCurrentNotebookId: () => null,
+      getScopedNotes() { return this._notes; },
+      ensureCategoryOptions() {},
+    };
+
+    expect(() => app.renderCategories()).not.toThrow();
+    expect(categoryList.innerHTML).toContain('MakM');
+  });
 });

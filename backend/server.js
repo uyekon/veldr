@@ -3,6 +3,7 @@ import { testConnections, syncDatabases, closeConnections } from './config/datab
 import { initPasswordOnly } from './scripts/initPassword.js';
 
 let server = null;
+const HOST = process.env.HOST || (process.env.NODE_ENV === 'production' ? '127.0.0.1' : '0.0.0.0');
 
 // Databases must be ready before the server accepts requests
 const startServer = async () => {
@@ -20,9 +21,9 @@ const startServer = async () => {
     // Initialize password table (只初始化，不重复连接数据库)
     await initPasswordOnly();
 
-    server = app.listen(PORT, '0.0.0.0', () => {
+    server = app.listen(PORT, HOST, () => {
       console.log(`Server is running on port ${PORT}`);
-      console.log(`API URL: http://0.0.0.0:${PORT}/api`);
+      console.log(`API URL: http://${HOST}:${PORT}/api`);
     });
   } catch (error) {
     console.error('Unable to start server:', error);

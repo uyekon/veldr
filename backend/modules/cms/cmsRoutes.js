@@ -151,12 +151,12 @@ const updateWhiteboard = async (req, res, id, legacyResponse = false) => {
   return send(res, 200, legacyResponse ? legacyWhiteboard(updated) : publicWhiteboard(updated));
 };
 
-router.get('/whiteboards', viewer, asyncHandler(async (_req, res) => {
+router.get('/whiteboards', editor, asyncHandler(async (_req, res) => {
   const db = await loadDB();
   return send(res, 200, db.whiteboards.map(({ id, updatedAt }) => ({ id, name: id, updatedAt })));
 }));
 
-router.get('/whiteboards/:id', viewer, asyncHandler(async (req, res) => {
+router.get('/whiteboards/:id', editor, asyncHandler(async (req, res) => {
   if (!whiteboardIds.includes(req.params.id)) return send(res, 404, { error: 'Whiteboard not found' });
   const whiteboard = findWhiteboard(await loadDB(), req.params.id);
   return send(res, 200, publicWhiteboard(whiteboard));
@@ -167,7 +167,7 @@ router.put('/whiteboards/:id', editor, asyncHandler(async (req, res) => {
   return updateWhiteboard(req, res, req.params.id);
 }));
 
-router.get('/whiteboard', viewer, asyncHandler(async (_req, res) => {
+router.get('/whiteboard', editor, asyncHandler(async (_req, res) => {
   const whiteboard = findWhiteboard(await loadDB(), 't');
   return send(res, 200, legacyWhiteboard(whiteboard));
 }));

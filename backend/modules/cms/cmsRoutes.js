@@ -218,11 +218,13 @@ router.post('/notes', editor, asyncHandler(async (req, res) => {
   const content = String(body.content);
   const desc = normalizeDescription(body.desc);
   const timestamp = nowIso();
+  // Ensure every note has a notebook; default to the first available notebook.
+  const defaultNotebookId = db.menus.find(m => m.type === 'notebook')?.id || null;
   const note = {
     id: nextId(db.notes),
     title: String(body.title),
     category: body.category || 'work',
-    notebookId: body.notebookId || null,
+    notebookId: (body.notebookId && String(body.notebookId).trim()) ? String(body.notebookId) : defaultNotebookId,
     tags: normalizeTags(body.tags),
     date: body.date || new Date().toISOString().split('T')[0],
     readTime: body.readTime || `${Math.max(1, Math.ceil(content.length / 500))} min`,

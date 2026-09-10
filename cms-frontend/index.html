@@ -337,6 +337,11 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
 .modal__body > div[style*="display:flex"] > .modal__field{flex:1 1 180px!important;min-width:0}
 .modal__field{margin-bottom:var(--s5)}
 .modal__label{display:block;font-size:.875rem;font-weight:500;color:var(--c700);margin-bottom:var(--s2)}
+.modal__label-row{min-height:20px;display:flex;align-items:center;justify-content:space-between;gap:var(--s2);margin-bottom:var(--s2)}
+.modal__label-row .modal__label{margin-bottom:0}
+.modal__inline-action{appearance:none;border:0;background:transparent;color:var(--a700);font:inherit;font-size:.75rem;font-weight:600;line-height:20px;padding:0;cursor:pointer;white-space:nowrap}
+.modal__inline-action:hover{color:var(--a900);text-decoration:underline}
+.modal__inline-action:focus-visible{outline:2px solid var(--a500);outline-offset:2px;border-radius:3px}
 .modal__input,.modal__select{
   width:100%;padding:var(--s3);font-size:.9375rem;font-family:var(--font-sans);
   border:1px solid var(--c200);border-radius:8px;outline:none;
@@ -820,9 +825,9 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
       </div>
       <div style="display:flex;gap:var(--s5)">
         <div class="modal__field" style="flex:1">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--s2)">
-            <label class="modal__label">分类</label>
-            <button class="modal__tool-btn" type="button" data-action="add-category">+ 新建分类</button>
+          <div class="modal__label-row">
+            <label class="modal__label" for="noteCategory">分类</label>
+            <button class="modal__inline-action" type="button" data-action="add-category">+ 新建</button>
           </div>
           <select class="modal__select" id="noteCategory">
             <option value="work">工作</option>

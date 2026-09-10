@@ -214,19 +214,19 @@ export const categoryMethods = {
 
   _renderCategoriesNotebookView(container, isEditor, scopedNotes, notebookId) {
     // Notebook view: only show categories assigned to this notebook.
-    // Root categories (parentId === null) whose notebookId includes the current notebook.
-    // Fall back to global categories (notebookId empty) if no notebook-bound ones match.
+    // Root categories (parentId === null) are scoped by their notebook binding
+    // and by the notes actually present in the current notebook.
     const scopedCategoryIds = new Set(scopedNotes.map(n => n.category));
 
-    // Filter root categories relevant to this notebook
-    let roots = this._categories.filter(c => !c.parentId);
-    const notebookRoots = roots.filter(c => Array.isArray(c.notebookId) && c.notebookId.includes(notebookId));
-    const usedRoots = notebookRoots.length > 0 ? notebookRoots : roots.filter(c => !Array.isArray(c.notebookId) || c.notebookId.length === 0);
-
-    // Only include roots that have notes in scope
-    const visibleRoots = usedRoots.filter(cat => {
+    // Keep explicitly bound roots, but also include every root actually used
+    // by this notebook.  The latter makes old notes whose category binding has
+    // not yet been backfilled discoverable in the sidebar.
+    const roots = this._categories.filter(c => !c.parentId);
+    const visibleRoots = roots.filter(cat => {
       const subtreeIds = this.getCategorySubtreeIds(cat.id);
-      return [...subtreeIds].some(id => scopedCategoryIds.has(id));
+      const isUsedByNotebook = [...subtreeIds].some(id => scopedCategoryIds.has(id));
+      const isBoundToNotebook = Array.isArray(cat.notebookId) && cat.notebookId.includes(notebookId);
+      return isBoundToNotebook || isUsedByNotebook;
     }).sort((a, b) => a.label.localeCompare(b.label, 'zh-CN'));
 
     const renderCategory = (cat, depth = 0) => {

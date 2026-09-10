@@ -33,7 +33,9 @@ export const notesViewMethods = {
             .filter(c => c.label === refCat.label && (c.notebookId || null) === (refCat.notebookId || null))
             .flatMap(c => this.getCategorySubtreeIds(c.id))
         : [];
-      const uniqueIds = new Set(allGroupIds.length ? allGroupIds : this.getCategorySubtreeIds(categoryId));
+      const uniqueIds = allGroupIds.length
+        ? allGroupIds.reduce((merged, s) => { s.forEach(v => merged.add(v)); return merged; }, new Set())
+        : this.getCategorySubtreeIds(categoryId);
       notes = notes.filter(n => uniqueIds.has(n.category));
     }
     else if (this.currentFilter.startsWith('tag:')) {

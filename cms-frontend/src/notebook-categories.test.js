@@ -83,4 +83,23 @@ describe('notebook category sidebar', () => {
 
     expect(calls).toEqual([['DELETE', '/api/cms/categories/makm']]);
   });
+
+  it('filters notes by the selected Docs category', async () => {
+    const { notesViewMethods } = await import('./app/notes-view.js');
+    const app = {
+      ...notesViewMethods,
+      currentFilter: 'category:makm', searchQuery: '',
+      _categories: [{ id: 'makm', label: 'MakM', parentId: null, notebookId: ['methods'] }],
+      _notes: [
+        { id: 1, category: 'makm', notebookId: 'methods', tags: [] },
+        { id: 2, category: 'life', notebookId: 'methods', tags: [] },
+      ],
+      getScopedNotes() { return this._notes; },
+      isCategoryFilter: (filter) => filter.startsWith('category:'),
+      getCategoryIdFromFilter: (filter) => filter.slice('category:'.length),
+      getCategorySubtreeIds: (id) => new Set([id]),
+    };
+
+    expect(app.getFilteredNotes().map(note => note.id)).toEqual([1]);
+  });
 });

@@ -235,6 +235,15 @@ router.post('/notes', editor, asyncHandler(async (req, res) => {
     updatedAt: timestamp,
   };
 
+  // Sync category.notebookId to this note's notebook when saving.
+  // A category is bound only if all existing notes with it are in the same notebook;
+  // otherwise it stays global (null).
+  const catIdx = db.categories.findIndex(c => c.id === note.category);
+  if (catIdx !== -1) {
+    const usedIn = new Set(db.notes.map(n => n.notebookId || null));
+    const allSameNB = usedIn.size <= 1;
+    db.categories[catIdx] = { ...db.categories[catIdx], notebookId: allSameNB ? (note.notebookId || null) : null };
+  }
   db.notes.unshift(note);
   await persistDB();
   return send(res, 201, note);
@@ -279,6 +288,13 @@ router.put('/notes/:id', editor, asyncHandler(async (req, res) => {
   };
 
   db.notes[index] = updated;
+  // Sync category.notebookId when the note's category/notebook pair changes.
+  const upCatIdx = db.categories.findIndex(c => c.id === updated.category);
+  if (upCatIdx !== -1) {
+    const usedIn = new Set(db.notes.map(n => n.notebookId || null));
+    const allSameNB = usedIn.size <= 1;
+    db.categories[upCatIdx] = { ...db.categories[upCatIdx], notebookId: allSameNB ? (updated.notebookId || null) : null };
+  }
   await persistDB();
   await cleanupUnreferencedCmsUploads({ notes: db.notes, candidates: previousImages });
   return send(res, 200, updated);

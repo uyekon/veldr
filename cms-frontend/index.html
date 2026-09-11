@@ -233,19 +233,27 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
 .note-card__tags:empty{display:none}
 
 /* ===== View: Detail ===== */
-.detail-view{display:none}
+.detail-view{display:none;max-width:1080px;margin:0 auto;padding-bottom:var(--s10)}
 .detail-view--active{display:block}
-.detail__back{
-  display:inline-flex;align-items:center;gap:var(--s2);
-  padding:var(--s2) var(--s3);font-size:.875rem;font-weight:500;
-  color:var(--c600);background:transparent;border:1px solid var(--c200);
-  border-radius:7px;cursor:pointer;margin-bottom:var(--s6);
-  transition:all .15s var(--ease);
-}
-.detail__back:hover{background:var(--c100);color:var(--c900)}
-.detail__meta{display:flex;align-items:center;gap:var(--s4);margin-bottom:var(--s4);font-size:.875rem;color:var(--c400);flex-wrap:wrap}
-.detail__meta-tag{padding:2px var(--s3);font-size:.75rem;font-weight:500;color:var(--a700);background:var(--a50);border-radius:4px}
-.detail__content{max-width:720px}
+.detail__hero{padding:var(--s2) 0 var(--s8);border-bottom:1px solid #e6eeeb}
+.detail__hero-top{display:flex;align-items:center;justify-content:space-between;gap:var(--s4);margin-bottom:var(--s6)}
+.detail__back{display:inline-flex;align-items:center;gap:var(--s2);padding:7px 10px;font-size:.8125rem;font-weight:600;color:#4d625e;background:#f5f9f7;border:1px solid #e8efec;border-radius:9px;cursor:pointer;transition:all .15s var(--ease)}
+.detail__back:hover{background:#effaf4;color:#236449;border-color:#bfe9d2}
+.detail__actions{display:flex;align-items:center;gap:var(--s2)}
+.detail__edit{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border:1px solid #d4f2e2;border-radius:9px;background:#edfff5;color:#277055;font:600 .8125rem var(--font-sans);cursor:pointer;transition:all .15s var(--ease)}
+.detail__edit:hover{background:#dff9eb;border-color:#9edbbd}
+.detail__eyebrow{margin:0 0 var(--s3);font-size:.8125rem;font-weight:600;color:#718d87;letter-spacing:.01em}
+.detail__title{max-width:900px;margin:0;color:#153c34;font-size:clamp(2rem,4vw,3rem);font-weight:800;letter-spacing:-.045em;line-height:1.12}
+.detail__desc{max-width:760px;margin:var(--s4) 0 0;color:#68837d;font-size:1rem;line-height:1.75}
+.detail__meta-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--s3);margin-top:var(--s6)}
+.detail__meta-item{min-width:0;padding:var(--s3) var(--s4);border:1px solid #e6eeeb;border-radius:12px;background:#fff;box-shadow:0 3px 10px rgb(43 83 71/.035)}
+.detail__meta-label{display:block;margin-bottom:3px;color:#8ba19c;font-size:.6875rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.detail__meta-value{display:block;overflow:hidden;color:#294943;font-size:.8125rem;font-weight:600;text-overflow:ellipsis;white-space:nowrap}
+.detail__chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:var(--s4)}
+.detail__chip{display:inline-flex;align-items:center;min-height:26px;padding:3px 9px;border-radius:999px;background:#effaf4;color:#25734f;font-size:.75rem;font-weight:600}
+.detail__chip--star{background:#fff8e8;color:#9a6b10}
+.detail__body{margin-top:var(--s8);padding:clamp(var(--s5),4vw,var(--s10));border:1px solid #e6eeeb;border-radius:16px;background:#fff;box-shadow:0 3px 10px rgb(43 83 71/.035)}
+.detail__content{max-width:780px;margin:0 auto}
 .detail__content h1{font-size:2rem;font-weight:700;letter-spacing:-.03em;color:var(--c900);line-height:1.2;margin-bottom:var(--s4)}
 .detail__content h2{font-size:1.375rem;font-weight:600;letter-spacing:-.02em;color:var(--c900);line-height:1.3;margin-top:var(--s10);margin-bottom:var(--s4);padding-top:var(--s8);border-top:1px solid var(--c200)}
 .detail__content h3{font-size:1.125rem;font-weight:600;color:var(--c900);margin-top:var(--s8);margin-bottom:var(--s3)}
@@ -457,6 +465,33 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
   padding:var(--s4) var(--s6) var(--s6);
   display:flex;justify-content:flex-end;gap:var(--s3);
 }
+
+/* ===== Full-page note editor ===== */
+.editor-page{position:fixed;inset:0;z-index:300;display:none;overflow:auto;background:#f8fbfa;color:var(--c800)}
+.editor-page--active{display:block}
+.editor-page .modal{width:100%;max-width:none;min-height:100vh;max-height:none;overflow:visible;border-radius:0;background:transparent;box-shadow:none}
+.editor-page .modal__header{position:sticky;top:0;z-index:2;min-height:64px;padding:0 clamp(var(--s4),4vw,var(--s10));border-bottom:1px solid #e5ece9;background:rgb(255 255 255/.94);backdrop-filter:blur(14px)}
+.editor-page__header-inner{display:flex;align-items:center;justify-content:space-between;width:min(1280px,100%);margin:0 auto;gap:var(--s4)}
+.editor-page__return{display:inline-flex;align-items:center;gap:7px;border:0;background:transparent;color:#4d625e;font:600 .8125rem var(--font-sans);cursor:pointer;padding:9px 0}.editor-page__return:hover{color:#236449}
+.editor-page__header-status{display:flex;align-items:center;gap:8px;color:#718d87;font-size:.75rem;font-weight:600}.editor-page__header-status::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--a500);box-shadow:0 0 0 4px var(--a100)}
+.editor-page .modal__body{width:min(1280px,100%);margin:0 auto;padding:clamp(var(--s5),4vw,var(--s10)) clamp(var(--s4),4vw,var(--s8)) 110px}
+.editor-page .modal__footer{position:fixed;z-index:3;right:0;bottom:0;left:0;display:flex;align-items:center;padding:12px clamp(var(--s4),4vw,var(--s10));border-top:1px solid #e5ece9;background:rgb(255 255 255/.94);backdrop-filter:blur(14px)}
+.editor-page .modal__footer::before{content:'';flex:1}.editor-page .modal__footer>*:first-child{margin-right:auto!important}
+.editor-page__identity{max-width:920px;margin:0 auto var(--s8)}
+.editor-page__eyebrow{display:flex;align-items:center;gap:8px;margin:0 0 var(--s3);color:#718d87;font-size:.8125rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase}.editor-page__eyebrow::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--a500);box-shadow:0 0 0 4px var(--a100)}
+.editor-page__title{width:100%;padding:0;border:0;border-bottom:1px solid transparent;outline:0;background:transparent;color:#153c34;font:800 clamp(2rem,4vw,3rem)/1.14 var(--font-sans);letter-spacing:-.045em}.editor-page__title::placeholder{color:#b4c2bf}.editor-page__title:focus{border-bottom-color:#9edbbd}
+.editor-page__subtitle{margin:var(--s3) 0 0;color:#68837d;font-size:.875rem;line-height:1.65}
+.editor-page__meta{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--s3)!important;align-items:start;max-width:1080px;margin:0 auto var(--s6)}
+.editor-page__meta .modal__field{min-width:0;margin:0!important;padding:var(--s3);border:1px solid #e6eeeb;border-radius:12px;background:#fff;box-shadow:0 3px 10px rgb(43 83 71/.025)}.editor-page__meta .modal__field--description{grid-column:span 2}
+.editor-page .modal__label{margin-bottom:6px;color:#718d87;font-size:.6875rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase}.editor-page .modal__label-row{min-height:auto;margin-bottom:6px}.editor-page .modal__inline-action{font-size:.6875rem}
+.editor-page .modal__input,.editor-page .modal__select{padding:7px 8px;border-color:#e8efec;border-radius:8px;background:#fafdfe;font-size:.875rem}
+.editor-page__tag-chips{display:flex;flex-wrap:wrap;gap:6px;min-height:0;margin-top:8px}.editor-page__tag-chips:empty{display:none}.editor-page__tag-chip{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:#effaf4;color:#25734f;font-size:.6875rem;font-weight:700}
+.editor-page__content{max-width:1080px;margin:0 auto!important}.editor-page__content .modal__label{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--s3);font-size:.75rem}.editor-page__content .modal__label span{color:#8ba19c;font-size:.6875rem;font-weight:600;letter-spacing:0;text-transform:none}
+.editor-page .modal__toolbar{gap:6px;padding:8px;border:1px solid #e6eeeb;border-radius:12px;background:#fff;box-shadow:0 3px 10px rgb(43 83 71/.025)}
+.editor-page .modal__tool-btn{padding:7px 9px;border-color:transparent;border-radius:8px;background:transparent;color:#4d625e}.editor-page .modal__tool-btn:hover{background:#effaf4;color:#236449;border-color:#d4f2e2}
+.editor-page .modal__image-layout{border-color:#e6eeeb;background:#f6f9f8}.editor-page .modal__view-toggle{margin-left:auto;border-color:#dce9e3;background:#f4f8f6}
+.editor-page .markdown-editor-host{min-height:calc(100vh - 500px);border-color:#e6eeeb;border-radius:14px;box-shadow:0 3px 10px rgb(43 83 71/.025)}.editor-page .markdown-editor-host .tiptap{min-height:calc(100vh - 540px);padding:clamp(var(--s5),4vw,var(--s8));font-size:1rem;line-height:1.85}
+.editor-page .markdown-source .modal__textarea,.editor-page .markdown-preview{min-height:calc(100vh - 500px);height:calc(100vh - 500px);max-height:none;border-radius:14px}.editor-page .markdown-status{margin-top:var(--s3)}
 .btn{
   padding:var(--s3) var(--s6);font-size:.875rem;font-weight:500;
   font-family:var(--font-sans);border:none;border-radius:8px;cursor:pointer;
@@ -603,6 +638,21 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
   .markdown-editor-host{min-height:360px}.markdown-editor-host .tiptap{min-height:330px;padding:var(--s4)}
   .markdown-preview{min-height:360px;max-height:420px}
   .markdown-status{gap:var(--s2)}
+  .detail__hero{padding-bottom:var(--s6)}
+  .detail__title{font-size:2rem}
+  .detail__meta-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s2)}
+  .detail__body{margin-top:var(--s5);padding:var(--s5);border-radius:12px}
+  .editor-page .modal__header{min-height:56px;padding:0 var(--s4)}
+  .editor-page .modal__body{padding:var(--s5) var(--s4) 96px}
+  .editor-page__identity{margin-bottom:var(--s5)}
+  .editor-page__title{font-size:2rem}
+  .editor-page__meta{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s2)!important;margin-bottom:var(--s5)}
+  .editor-page__meta .modal__field--description{grid-column:span 2}
+  .editor-page__content .modal__label{align-items:flex-start;flex-direction:column;gap:3px}
+  .editor-page .modal__toolbar{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+  .editor-page .modal__toolbar > *{flex:0 0 auto}
+  .editor-page .markdown-editor-host{min-height:460px}.editor-page .markdown-editor-host .tiptap{min-height:420px;padding:var(--s5)}
+  .editor-page .modal__footer{padding:10px var(--s4)}
   .page-view{max-width:100%}
   .whiteboard__header{align-items:stretch;flex-direction:column;gap:var(--s4)}
   .whiteboard__mobile-switcher{display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));gap:var(--s2);margin-bottom:var(--s5)}
@@ -807,24 +857,27 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
   </nav>
 </div>
 
-<!-- New/Edit Note Modal -->
-<div class="modal-overlay" id="noteModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+<!-- Full-page note editor -->
+<section class="editor-page" id="noteModal" aria-labelledby="modalTitle">
   <div class="modal">
     <div class="modal__header">
-      <h3 class="modal__title" id="modalTitle">新建笔记</h3>
-      <button class="modal__close" data-action="close-note-modal">✕</button>
+      <div class="editor-page__header-inner">
+        <button class="editor-page__return" data-action="close-note-modal" type="button" aria-label="返回笔记列表">← 返回笔记</button>
+        <span class="editor-page__header-status" id="editorPageStatus">专注编辑</span>
+      </div>
     </div>
     <div class="modal__body">
-      <div class="modal__field">
-        <label class="modal__label">标题</label>
-        <input class="modal__input" id="noteTitle" placeholder="输入笔记标题...">
+      <div class="editor-page__identity">
+        <div class="editor-page__eyebrow" id="modalTitle">新建笔记</div>
+        <input class="editor-page__title" id="noteTitle" placeholder="为这篇笔记命名" aria-label="笔记标题">
+        <p class="editor-page__subtitle">元数据集中在下方，正文始终保持在当前页面；内容会按既有规则自动保存。</p>
       </div>
-      <div class="modal__field">
-        <label class="modal__label">描述（可选）</label>
-        <input class="modal__input" id="noteDesc" maxlength="500" placeholder="可选，用于列表预览；为空时自动使用正文">
-      </div>
-      <div style="display:flex;gap:var(--s5)">
-        <div class="modal__field" style="flex:1">
+      <div class="editor-page__meta">
+        <div class="modal__field modal__field--description">
+          <label class="modal__label">摘要</label>
+          <input class="modal__input" id="noteDesc" maxlength="500" placeholder="可选，用于列表预览；为空时自动使用正文">
+        </div>
+        <div class="modal__field">
           <div class="modal__label-row">
             <label class="modal__label" for="noteCategory">分类</label>
             <button class="modal__inline-action" type="button" data-action="add-category">+ 新建</button>
@@ -834,21 +887,22 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
             <option value="learn">学习</option>
           </select>
         </div>
-        <div class="modal__field" style="flex:1">
+        <div class="modal__field">
           <label class="modal__label">子分类</label>
           <select class="modal__select" id="noteSubcategory" disabled><option value="">无子分类</option></select>
         </div>
-        <div class="modal__field" style="flex:1">
+        <div class="modal__field">
           <label class="modal__label">Notebook</label>
           <select class="modal__select" id="noteNotebook"></select>
         </div>
-        <div class="modal__field" style="flex:1">
+        <div class="modal__field">
           <label class="modal__label">标签（逗号分隔）</label>
           <input class="modal__input" id="noteTags" placeholder="例如: frontend, react">
+          <div class="editor-page__tag-chips" id="editorTagChips" aria-label="当前标签"></div>
         </div>
       </div>
-      <div class="modal__field">
-        <label class="modal__label">内容（支持 Markdown）</label>
+      <div class="modal__field editor-page__content">
+        <label class="modal__label">正文 <span>Markdown 工具栏 · Ctrl / ⌘ + S 保存</span></label>
         <div class="modal__toolbar">
           <button type="button" class="modal__tool-btn modal__tool-btn--icon" data-action="markdown-format" data-format="h1" title="一级标题 Ctrl+Alt+1">H1</button>
           <button type="button" class="modal__tool-btn modal__tool-btn--icon" data-action="markdown-format" data-format="h2" title="二级标题 Ctrl+Alt+2">H2</button>
@@ -914,7 +968,7 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
       <button class="btn btn--primary" id="modalSaveBtn" data-action="save-note">保存笔记</button>
     </div>
   </div>
-</div>
+</section>
 
 <!-- Draft recovery modal -->
 <div class="modal-overlay" id="draftRecoveryModal" role="dialog" aria-modal="true" aria-labelledby="draftRecoveryTitle">

@@ -57,8 +57,8 @@ function hasSameNotePayload(left, right) {
 
 export const editorMethods = {
   toggleEditorFullscreen() {
-    const modal = document.getElementById('noteModal')?.querySelector('.modal');
-    modal?.classList.toggle('modal--fullscreen');
+    // 编辑器已是全页专注模式；保留快捷入口，用于回到正文输入焦点。
+    document.querySelector('#noteContentHost .tiptap')?.focus();
   },
   async openNoteModal(editId) {
     if (this.role !== 'editor') {
@@ -100,13 +100,15 @@ export const editorMethods = {
     this.ensureNotebookOptions(this.draftNotebookId);
     this.setCategorySelection(existingNote?.category || this.getDefaultCategoryId(), this.draftNotebookId);
 
-    modal.classList.add('modal-overlay--active');
+    modal.classList.add('editor-page--active');
+    document.body.classList.add('editor-page-open');
     this.autosaveDirty = false;
     this.conflictPending = false;
     this.suppressAutosave = true;
     await this.setEditorMarkdown(content);
     this.setEditorMode('write');
     this.updateMarkdownPreview(true);
+    this.renderEditorTagChips();
     this.suppressAutosave = false;
     const restoredDraft = await this.restoreEditorDraft(existingNote);
     if (!restoredDraft) this.setAutosaveStatus(this.editingNoteId ? `服务器版本 v${this.editingNoteVersion || 1}` : '新笔记尚未保存');
@@ -177,6 +179,16 @@ export const editorMethods = {
     });
   },
 
+  renderEditorTagChips() {
+    const host = document.getElementById('editorTagChips');
+    if (!host) return;
+    const tags = String(document.getElementById('noteTags')?.value || '')
+      .split(',')
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+    host.innerHTML = tags.map((tag) => `<span class="editor-page__tag-chip">#${this.escapeHTML(tag)}</span>`).join('');
+  },
+
   scheduleDraftSave() {
     if (this.role !== 'editor' || this.suppressAutosave) return;
     clearTimeout(this.draftSaveTimer);
@@ -226,6 +238,7 @@ export const editorMethods = {
     this.ensureNotebookOptions(this.draftNotebookId);
     this.setCategorySelection(draft.category || this.getDefaultCategoryId(), this.draftNotebookId);
     document.getElementById('noteTags').value = (draft.tags || []).join(', ');
+    this.renderEditorTagChips();
     await this.setEditorMarkdown(draft.content);
     this.setEditorMode('write');
     this.suppressAutosave = false;
@@ -313,7 +326,7 @@ export const editorMethods = {
 
   confirmEditorExit() {
     const modal = document.getElementById('noteModal');
-    if (!modal?.classList.contains('modal-overlay--active') || !this.hasUnsavedEditorInput()) return true;
+    if (!modal?.classList.contains('editor-page--active') || !this.hasUnsavedEditorInput()) return true;
     if (confirm('有未保存的修改，确定要离开编辑吗？')) {
       void saveDraft(this.getEditorDraft()).catch(() => {});
       return true;
@@ -326,7 +339,8 @@ export const editorMethods = {
     if (!options.force && this.hasUnsavedEditorInput()) {
       void saveDraft(this.getEditorDraft()).catch(() => {});
     }
-    document.getElementById('noteModal').classList.remove('modal-overlay--active');
+    document.getElementById('noteModal').classList.remove('editor-page--active');
+    document.body.classList.remove('editor-page-open');
     clearTimeout(this.autosaveTimer);
     clearTimeout(this.draftSaveTimer);
     this.autosaveTimer = null; this.autosaveDirty = false; this.conflictPending = false;
@@ -384,7 +398,12 @@ export const editorMethods = {
     set('markdownNotebook', this.getCurrentNotebookLabel());
   },
 
-  setAutosaveStatus(text) { const el = document.getElementById('markdownAutosave'); if (el) el.textContent = text; },
+  setAutosaveStatus(text) {
+    const status = document.getElementById('markdownAutosave');
+    if (status) status.textContent = text;
+    const headerStatus = document.getElementById('editorPageStatus');
+    if (headerStatus) headerStatus.textContent = text;
+  },
 
   scheduleAutosave() {
     if (this.role !== 'editor') return;
@@ -476,6 +495,7 @@ export const editorMethods = {
     this.ensureNotebookOptions(this.draftNotebookId);
     this.setCategorySelection(note.category || this.getDefaultCategoryId(), this.draftNotebookId);
     document.getElementById('noteTags').value = (note.tags || []).join(', ');
+    this.renderEditorTagChips();
     document.getElementById('noteDesc').value = note.desc || '';
     await this.setEditorMarkdown(note.content || '');
     this.editingNoteVersion = Number(note.version) || 1;

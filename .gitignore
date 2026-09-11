@@ -4,6 +4,7 @@ frontend/dist/
 cms-frontend/dist/
 frontend/.vercel/
 artifacts/
+.ui-kit/
 
 # Runtime state and user-generated media
 backend/temp/

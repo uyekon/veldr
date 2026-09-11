@@ -97,7 +97,7 @@ export const authMethods = {
     const now = Date.now();
     if (now - this._lastServerRefreshAt < 5000) return;
     this._lastServerRefreshAt = now;
-    const modalOpen = document.getElementById('noteModal')?.classList.contains('modal-overlay--active');
+    const modalOpen = document.getElementById('noteModal')?.classList.contains('editor-page--active');
     if (modalOpen) {
       await this.checkEditingRemoteVersion(reason);
       return;

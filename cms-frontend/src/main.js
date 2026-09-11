@@ -103,7 +103,7 @@ const boot = () => {
       App.openShortcutModal();
       return;
     }
-    const noteModalOpen = document.getElementById('noteModal')?.classList.contains('editor-page--active');
+    const noteModalOpen = document.getElementById('noteModal')?.classList.contains('modal-overlay--active');
     if (App.currentNav === 'whiteboard' && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
       e.preventDefault();
       App.saveWhiteboard();
@@ -142,7 +142,7 @@ const boot = () => {
         return;
       }
       const modal = document.getElementById('noteModal');
-      if (modal?.classList.contains('editor-page--active')) {
+      if (modal?.classList.contains('modal-overlay--active')) {
         if (App.editingMenuId) return;
         App.closeModal();
         return;

@@ -116,33 +116,46 @@ export const notesViewMethods = {
 
     const notebookLabel = this._menus.find((menu) => menu.id === note.notebookId)?.label || '未归类 Notebook';
     const categoryLabel = this.getCategoryLabel(note.category);
-    const createdAt = note.createdAt || note.date || '—';
-    const updatedAt = note.updatedAt || note.date || '—';
-    const tagsHTML = (note.tags || []).map((tag) => `<span class="detail__chip">#${this.escapeHTML(tag)}</span>`).join('');
-    const editBtn = isEditor ? `<button class="detail__edit" data-action="open-note-modal" data-id="${note.id}"><span aria-hidden="true">✎</span> 编辑笔记</button>` : '';
+    const metaHTML = [
+      `<span class="detail__meta-tag">${this.escapeHTML(categoryLabel)}</span>`,
+      ...(note.tags || []).map((tag) => `<span>#${this.escapeHTML(tag)}</span>`),
+      note.notebookId ? `<span>📚 ${this.escapeHTML(notebookLabel)}</span>` : '',
+      `<span>📅 ${note.date}</span>`,
+      `<span>⏱ ${note.readTime}阅读</span>`,
+      note.starred ? '<span>⭐ 已收藏</span>' : ''
+    ].join('');
+    const editBtn = isEditor ? `<button class="btn btn--secondary" style="margin-left:auto" data-action="open-note-modal" data-id="${note.id}">✏️ 编辑</button>` : '';
     const contentHTML = this.renderMarkdown(note.content);
+    const isMobileDetail = window.matchMedia('(max-width:768px)').matches;
 
-    detailEl.innerHTML = `
-      <section class="detail__hero" aria-label="笔记基本信息">
-        <div class="detail__hero-top">
+    detailEl.innerHTML = isMobileDetail ? `
+      <section class="detail-mobile" aria-label="笔记详情">
+        <div class="detail-mobile__topbar">
           <button class="detail__back" data-action="show-browse">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
             返回列表
           </button>
-          <div class="detail__actions">${editBtn}</div>
+          ${isEditor ? `<button class="detail-mobile__edit" data-action="open-note-modal" data-id="${note.id}">编辑</button>` : ''}
         </div>
-        <p class="detail__eyebrow">${this.escapeHTML(notebookLabel)} / ${this.escapeHTML(categoryLabel)}</p>
-        <h1 class="detail__title">${this.escapeHTML(note.title)}</h1>
-        ${note.desc ? `<p class="detail__desc">${this.escapeHTML(note.desc)}</p>` : ''}
-        <div class="detail__meta-grid">
-          <div class="detail__meta-item"><span class="detail__meta-label">Notebook</span><span class="detail__meta-value">${this.escapeHTML(notebookLabel)}</span></div>
-          <div class="detail__meta-item"><span class="detail__meta-label">分类</span><span class="detail__meta-value">${this.escapeHTML(categoryLabel)}</span></div>
-          <div class="detail__meta-item"><span class="detail__meta-label">创建于</span><span class="detail__meta-value">${this.escapeHTML(createdAt)}</span></div>
-          <div class="detail__meta-item"><span class="detail__meta-label">最近更新</span><span class="detail__meta-value">${this.escapeHTML(updatedAt)} · ${this.escapeHTML(note.readTime || '1 min')} 阅读</span></div>
+        <p class="detail-mobile__eyebrow">${this.escapeHTML(notebookLabel)} / ${this.escapeHTML(categoryLabel)}</p>
+        <h1 class="detail-mobile__title">${this.escapeHTML(note.title)}</h1>
+        ${note.desc ? `<p class="detail-mobile__desc">${this.escapeHTML(note.desc)}</p>` : ''}
+        <div class="detail-mobile__meta-grid">
+          <div><span>Notebook</span><strong>${this.escapeHTML(notebookLabel)}</strong></div>
+          <div><span>分类</span><strong>${this.escapeHTML(categoryLabel)}</strong></div>
+          <div><span>创建于</span><strong>${this.escapeHTML(note.createdAt || note.date || '—')}</strong></div>
+          <div><span>最近更新</span><strong>${this.escapeHTML(note.updatedAt || note.date || '—')}</strong></div>
         </div>
-        ${(tagsHTML || note.starred) ? `<div class="detail__chips">${tagsHTML}${note.starred ? '<span class="detail__chip detail__chip--star">★ 已收藏</span>' : ''}</div>` : ''}
+        ${(note.tags?.length || note.starred) ? `<div class="detail-mobile__chips">${(note.tags || []).map((tag) => `<span>#${this.escapeHTML(tag)}</span>`).join('')}${note.starred ? '<span>★ 已收藏</span>' : ''}</div>` : ''}
+        <div class="detail-mobile__body"><div class="detail__content">${contentHTML}</div></div>
       </section>
-      <section class="detail__body" aria-label="笔记正文"><div class="detail__content">${contentHTML}</div></section>
+    ` : `
+      <button class="detail__back" data-action="show-browse">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        返回列表
+      </button>
+      <div class="detail__meta">${metaHTML}${editBtn}</div>
+      <div class="detail__content">${contentHTML}</div>
     `;
     this.renderDetailToc(detailEl);
     document.getElementById('mainContent').scrollTop = 0;

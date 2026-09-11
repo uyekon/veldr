@@ -85,22 +85,22 @@ export const categoryMethods = {
     const selected = this.getCategoryById(value);
     const rootId = selected?.parentId || (roots.some(category => category.id === selected?.id) ? selected.id : roots[0]?.id || '');
     select.value = rootId;
-    this.syncSubcategoryOptions(selected?.id || rootId, targetNotebookId);
+    this.syncSubcategoryOptions(selected?.parentId === rootId ? selected.id : '', targetNotebookId);
   },
 
   syncSubcategoryOptions(selectedId, targetNotebookId = this.draftNotebookId ?? this.getCurrentNotebookId()) {
     const parentSelect = document.getElementById('noteCategory');
     const childSelect = document.getElementById('noteSubcategory');
     if (!parentSelect || !childSelect) return;
-    const selected = this.getCategoryById(selectedId || parentSelect.value);
-    const parentId = selected?.parentId || parentSelect.value;
+    const selected = this.getCategoryById(selectedId);
+    const parentId = parentSelect.value;
     const children = this._categories.filter(category => (
       category.parentId === parentId &&
       (!targetNotebookId || !Array.isArray(category.notebookId) || category.notebookId.length === 0 || category.notebookId.includes(targetNotebookId))
     ));
     childSelect.innerHTML = `<option value="">${children.length ? '不使用子分类' : '无子分类'}</option>${children.map(category => `<option value="${this.escapeHTML(category.id)}">${this.escapeHTML(category.label)}</option>`).join('')}`;
     childSelect.disabled = children.length === 0;
-    if (selected?.parentId === parentId) childSelect.value = selected.id;
+    childSelect.value = children.some(category => category.id === selected?.id) ? selected.id : '';
   },
 
   getSelectedCategoryId() {
@@ -109,7 +109,6 @@ export const categoryMethods = {
 
   setCategorySelection(id, targetNotebookId) {
     this.ensureCategoryOptions(id, targetNotebookId);
-    this.syncSubcategoryOptions(id, targetNotebookId);
   },
 
   ensureNotebookOptions(selectedId) {
@@ -406,7 +405,7 @@ export const categoryMethods = {
     } catch (e) { this.toast(e.message); }
   },
 
-  async addSubcategory(parentId) {
+  async addSubcategory(parentId, { selectInEditor = false } = {}) {
     if (this.role !== 'editor') { this.toast('需要编辑密码'); return; }
     const parent = this.getCategoryById(parentId);
     if (!parent) return;
@@ -414,16 +413,26 @@ export const categoryMethods = {
     const label = prompt(`在「${parent.label}」下添加子分类：`, '新子分类');
     if (!label || !label.trim()) return;
     try {
-      await this.api('POST', apiPath('/categories'), {
+      const category = await this.api('POST', apiPath('/categories'), {
         label: label.trim(),
         parentId: parent.id,
-        notebookId: parent.notebookId || [],
       });
       await this.reloadCategories();
+      if (selectInEditor) {
+        this.setCategorySelection(category.id, this.draftNotebookId);
+        this.scheduleAutosave();
+      }
       this.renderCategories();
       this.renderMobileFilters();
       this.toast('子分类已添加');
+      return category;
     } catch (e) { this.toast(e.message); }
+  },
+
+  async addEditorSubcategory() {
+    const parentId = document.getElementById('noteCategory')?.value;
+    if (!parentId) { this.toast('请先选择分类'); return; }
+    return this.addSubcategory(parentId, { selectInEditor: true });
   },
 
   async renameCategory(id) {

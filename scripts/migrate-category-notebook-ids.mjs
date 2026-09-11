@@ -2,11 +2,13 @@
 /**
  * migrate-category-notebook-ids.mjs
  *
- * Scans the CMS db.json and assigns category.notebookId as an array based on
- * the notebookId values of notes that use each category. Rules:
+ * Scans the CMS db.json and supplements category.notebookId from the
+ * notebookId values of notes that use each category. Rules:
  *
- *   - A used category is bound to every notebook containing one of its notes.
- *   - Categories with no notebook notes retain their existing binding.
+ *   - A note's notebook is added to its category and every ancestor.
+ *   - Existing category bindings are retained (the migration never narrows).
+ *   - An empty scope means global, so it remains global rather than becoming
+ *     restricted to the first notebook encountered.
  *   - Set CMS_DB_PATH to migrate a production data file explicitly.
  *
  * Writes the updated db.json back to disk.  A .migrated-backup is
@@ -23,17 +25,30 @@ const BACKUP_SUFFIX = '.migrated-backup';
 const db = JSON.parse(readFileSync(DB_PATH, 'utf8'));
 
 // ---------------------------------------------------------------------------
-// 1. Build a map: categoryId → Set<notebookId>
+// 1. Build a map: categoryId → Set<notebookId>, including ancestors.
 // ---------------------------------------------------------------------------
-const catNotebooks = new Map(); // categoryId → Set<string>
-db.categories.forEach(cat => catNotebooks.set(cat.id, new Set()));
+const categoryById = new Map(db.categories.map(cat => [cat.id, cat]));
+const catNotebooks = new Map(db.categories.map(cat => [cat.id, new Set()]));
+const ancestorIds = (categoryId) => {
+  const ids = [];
+  const seen = new Set();
+  let id = categoryId;
+  while (id && !seen.has(id)) {
+    seen.add(id);
+    const category = categoryById.get(id);
+    if (!category) break;
+    ids.push(id);
+    id = category.parentId || null;
+  }
+  return ids;
+};
 db.notes.forEach(note => {
-  const set = catNotebooks.get(note.category);
-  if (set && typeof note.notebookId === 'string' && note.notebookId) set.add(note.notebookId);
+  if (typeof note.notebookId !== 'string' || !note.notebookId) return;
+  ancestorIds(note.category).forEach((categoryId) => catNotebooks.get(categoryId)?.add(note.notebookId));
 });
 
 // ---------------------------------------------------------------------------
-// 2. Backfill every used category with its complete notebook set
+// 2. Supplement every restricted category with its complete notebook set.
 // ---------------------------------------------------------------------------
 // Create a timestamped backup before changing the file.
 const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -43,8 +58,14 @@ console.log(`Backup written to: ${backupPath}`);
 
 let changed = 0;
 db.categories.forEach(cat => {
-  const notebookIds = [...(catNotebooks.get(cat.id) || [])].sort();
-  if (notebookIds.length > 0 && JSON.stringify(cat.notebookId || []) !== JSON.stringify(notebookIds)) {
+  const existing = [...new Set((Array.isArray(cat.notebookId) ? cat.notebookId : [cat.notebookId])
+    .map(id => String(id || '').trim())
+    .filter(Boolean))];
+  // [] has the established meaning of a global category. It already covers
+  // every notebook, so do not turn it into a restricted scope.
+  if (existing.length === 0) return;
+  const notebookIds = [...new Set([...existing, ...(catNotebooks.get(cat.id) || [])])].sort();
+  if (JSON.stringify(existing) !== JSON.stringify(notebookIds)) {
     cat.notebookId = notebookIds;
     changed++;
     console.log(`  bind ${cat.label} (${cat.id}) → ${notebookIds.join(', ')}`);

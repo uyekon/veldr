@@ -12,6 +12,7 @@ const clickActions = {
   'set-filter': (App, el) => App.setFilterFromElement(el),
   'add-category': (App) => App.addCategory(),
   'add-subcategory': (App, el) => App.addSubcategory(el.dataset.id),
+  'add-editor-subcategory': (App) => App.addEditorSubcategory(),
   'rename-category': (App, el) => App.renameCategory(el.dataset.id),
   'delete-category': (App, el) => App.deleteCategory(el.dataset.id),
   'show-detail': (App, el) => App.showDetail(Number(el.dataset.id)),
@@ -109,11 +110,14 @@ export function installDelegation(App) {
   bind('noteTitle', 'input', () => App.scheduleAutosave());
   bind('noteTags', 'input', () => App.scheduleAutosave());
   bind('noteDesc', 'input', () => App.scheduleAutosave());
-  bind('noteCategory', 'change', () => { App.syncSubcategoryOptions(); App.scheduleAutosave(); });
+  bind('noteCategory', 'change', () => { App.syncSubcategoryOptions('', App.draftNotebookId); App.scheduleAutosave(); });
   bind('noteSubcategory', 'change', () => App.scheduleAutosave());
   bind('noteNotebook', 'change', (e) => {
     App.draftNotebookId = e.target.value || null;
-    App.setCategorySelection(document.getElementById('noteCategory')?.value, App.draftNotebookId);
+    App.setCategorySelection(
+      document.getElementById('noteSubcategory')?.value || document.getElementById('noteCategory')?.value,
+      App.draftNotebookId,
+    );
     App.scheduleAutosave();
   });
   document.addEventListener('change', (e) => {

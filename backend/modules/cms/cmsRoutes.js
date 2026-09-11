@@ -48,6 +48,53 @@ const markdownExcerpt = (content) => String(content || '')
   .trim()
   .slice(0, 120);
 const normalizeDescription = (value) => String(value || '').trim().slice(0, 500);
+const normalizeNotebookIds = (value) => [...new Set((Array.isArray(value) ? value : [value])
+  .map((id) => String(id || '').trim())
+  .filter(Boolean))];
+
+// An empty notebookId array means that a category is global. A child may keep
+// that global scope only when its parent is global; otherwise it must use a
+// non-empty subset of the parent's scope.
+const isCategoryScopeWithinParent = (scope, parentScope) => (
+  parentScope.length === 0 || (scope.length > 0 && scope.every((id) => parentScope.includes(id)))
+);
+
+const getCategoryAncestorIds = (categories, categoryId) => {
+  const categoryById = new Map(categories.map((category) => [category.id, category]));
+  const ids = [];
+  const seen = new Set();
+  let currentId = categoryId;
+  while (currentId && !seen.has(currentId)) {
+    seen.add(currentId);
+    const category = categoryById.get(currentId);
+    if (!category) break;
+    ids.push(category.id);
+    currentId = category.parentId || null;
+  }
+  return ids;
+};
+
+const wouldCreateCategoryCycle = (categories, categoryId, parentId) => (
+  getCategoryAncestorIds(categories, parentId).includes(categoryId)
+);
+
+// Note saves are also a safe repair path for old data. Restricted categories
+// collect the note's notebook on themselves and every ancestor. Global
+// categories stay global: [] already means they are available in every
+// notebook and must not accidentally become restricted to one notebook.
+const bindNotebookToCategoryAncestors = (db, categoryId, notebookId) => {
+  const normalizedNotebookId = String(notebookId || '').trim();
+  if (!normalizedNotebookId) return;
+  const indexes = new Map(db.categories.map((category, index) => [category.id, index]));
+  getCategoryAncestorIds(db.categories, categoryId).forEach((id) => {
+    const index = indexes.get(id);
+    if (index === undefined) return;
+    const category = db.categories[index];
+    const currentScope = normalizeNotebookIds(category.notebookId);
+    if (currentScope.length === 0 || currentScope.includes(normalizedNotebookId)) return;
+    db.categories[index] = { ...category, notebookId: [...currentScope, normalizedNotebookId] };
+  });
+};
 
 const normalizeNoteMeta = (note) => ({
   version: noteVersion(note),
@@ -238,15 +285,7 @@ router.post('/notes', editor, asyncHandler(async (req, res) => {
     updatedAt: timestamp,
   };
 
-  // Add this note's notebook to category's notebookId array.
-  const catIdx = db.categories.findIndex(c => c.id === note.category);
-  if (catIdx !== -1) {
-    const currentNbs = db.categories[catIdx].notebookId || [];
-    const nb = note.notebookId;
-    if (nb && !currentNbs.includes(nb)) {
-      db.categories[catIdx] = { ...db.categories[catIdx], notebookId: [...currentNbs, nb] };
-    }
-  }
+  bindNotebookToCategoryAncestors(db, note.category, note.notebookId);
   db.notes.unshift(note);
   await persistDB();
   return send(res, 201, note);
@@ -291,15 +330,7 @@ router.put('/notes/:id', editor, asyncHandler(async (req, res) => {
   };
 
   db.notes[index] = updated;
-  // Add the note's notebook to category's notebookId array.
-  const upCatIdx = db.categories.findIndex(c => c.id === updated.category);
-  if (upCatIdx !== -1) {
-    const currentNbs = db.categories[upCatIdx].notebookId || [];
-    const nb = updated.notebookId;
-    if (nb && !currentNbs.includes(nb)) {
-      db.categories[upCatIdx] = { ...db.categories[upCatIdx], notebookId: [...currentNbs, nb] };
-    }
-  }
+  bindNotebookToCategoryAncestors(db, updated.category, updated.notebookId);
   await persistDB();
   await cleanupUnreferencedCmsUploads({ notes: db.notes, candidates: previousImages });
   return send(res, 200, updated);
@@ -337,13 +368,17 @@ router.post('/categories', editor, asyncHandler(async (req, res) => {
   }
 
   const parentId = req.body?.parentId ? String(req.body.parentId) : null;
-  if (parentId && !db.categories.some(category => category.id === parentId)) {
+  const parent = parentId ? db.categories.find(category => category.id === parentId) : null;
+  if (parentId && !parent) {
     return send(res, 400, { error: 'Parent category not found' });
   }
-  const rawNb = req.body?.notebookId;
-  const notebookId = rawNb
-    ? Array.isArray(rawNb) ? rawNb.filter(Boolean).map(String) : [String(rawNb).trim()].filter(Boolean)
-    : [];
+  const hasNotebookScope = Object.hasOwn(req.body || {}, 'notebookId');
+  const notebookId = hasNotebookScope
+    ? normalizeNotebookIds(req.body.notebookId)
+    : normalizeNotebookIds(parent?.notebookId);
+  if (parent && !isCategoryScopeWithinParent(notebookId, normalizeNotebookIds(parent.notebookId))) {
+    return send(res, 400, { error: 'Subcategory notebook scope must be within its parent category' });
+  }
   const category = { id, label, parentId, notebookId };
   db.categories.push(category);
   await persistDB();
@@ -359,13 +394,16 @@ router.put('/categories/:id', editor, asyncHandler(async (req, res) => {
   if (!label) return send(res, 400, { error: 'Category label is required' });
 
   const parentId = req.body?.parentId === undefined ? db.categories[index].parentId || null : (req.body.parentId ? String(req.body.parentId) : null);
-  if (parentId && (parentId === req.params.id || !db.categories.some(category => category.id === parentId))) {
+  const parent = parentId ? db.categories.find(category => category.id === parentId) : null;
+  if (parentId && (!parent || wouldCreateCategoryCycle(db.categories, req.params.id, parentId))) {
     return send(res, 400, { error: 'Invalid parent category' });
   }
-  const rawNb = req.body?.notebookId;
-  const notebookId = rawNb === undefined
-    ? (db.categories[index].notebookId || [])
-    : Array.isArray(rawNb) ? rawNb.filter(Boolean).map(String) : [String(rawNb).trim()].filter(Boolean);
+  const notebookId = req.body?.notebookId === undefined
+    ? normalizeNotebookIds(db.categories[index].notebookId)
+    : normalizeNotebookIds(req.body.notebookId);
+  if (parent && !isCategoryScopeWithinParent(notebookId, normalizeNotebookIds(parent.notebookId))) {
+    return send(res, 400, { error: 'Subcategory notebook scope must be within its parent category' });
+  }
   db.categories[index] = { ...db.categories[index], label, parentId, notebookId };
   await persistDB();
   return send(res, 200, db.categories[index]);

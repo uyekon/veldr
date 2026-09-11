@@ -70,6 +70,41 @@ describe('NoteFlow administrator access', () => {
     await agent.delete(`/api/cms/notes/${note.body.id}`).expect(200);
   });
 
+  it('inherits subcategory notebook scope and repairs ancestor bindings from notes', async () => {
+    resetDBForTests({
+      notes: [],
+      menus: [
+        { id: 'docs', label: 'Docs', type: 'docs' },
+        { id: 'notebook_docs', label: 'Docs notebook', type: 'notebook' },
+        { id: 'notebook_goals', label: 'Goals notebook', type: 'notebook' },
+      ],
+      categories: [
+        { id: 'project', label: 'Project', notebookId: ['notebook_docs'] },
+      ],
+    });
+    const agent = await editor();
+
+    const child = await agent.post('/api/cms/categories').send({ label: 'Tasks', parentId: 'project' }).expect(201);
+    expect(child.body).toMatchObject({ parentId: 'project', notebookId: ['notebook_docs'] });
+
+    await agent.post('/api/cms/categories').send({
+      label: 'Invalid scope', parentId: 'project', notebookId: ['notebook_goals'],
+    }).expect(400);
+    await agent.put(`/api/cms/categories/${child.body.id}`).send({
+      label: 'Tasks', notebookId: [],
+    }).expect(400);
+
+    await agent.post('/api/cms/notes').send({
+      title: 'Legacy goal', content: 'Repair parent scope', category: child.body.id, notebookId: 'notebook_goals',
+    }).expect(201);
+    const categories = await agent.get('/api/cms/categories').expect(200);
+    const byId = new Map(categories.body.map((category) => [category.id, category]));
+    expect(byId.get('project').notebookId).toEqual(['notebook_docs', 'notebook_goals']);
+    expect(byId.get(child.body.id).notebookId).toEqual(['notebook_docs', 'notebook_goals']);
+
+    await agent.put('/api/cms/categories/project').send({ label: 'Project', parentId: child.body.id }).expect(400);
+  });
+
   it('keeps t, b, w, and dailyPush whiteboards independent and protects them from stale writes', async () => {
     await request(app).get('/api/cms/whiteboards').expect(401);
     await request(app).put('/api/cms/whiteboards/t').send({ content: 'blocked' }).expect(401);

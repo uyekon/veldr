@@ -111,6 +111,67 @@ describe('notebook category sidebar', () => {
     expect(selected).toEqual([['new-category', 'methods']]);
   });
 
+  it('refreshes subcategory choices when the editor category changes', async () => {
+    globalThis.window = { CMS_CONFIG: {} };
+    const { categoryMethods } = await import('./app/categories.js');
+    const parentSelect = { value: 'project' };
+    const childSelect = { value: 'old-child', disabled: true, innerHTML: '' };
+    globalThis.document = {
+      getElementById: (id) => ({ noteCategory: parentSelect, noteSubcategory: childSelect }[id] || null),
+    };
+    const app = {
+      ...categoryMethods,
+      _categories: [
+        { id: 'project', label: 'Project', notebookId: ['methods'] },
+        { id: 'project-tasks', label: 'Tasks', parentId: 'project', notebookId: ['methods'] },
+        { id: 'archive', label: 'Archive', notebookId: ['methods'] },
+        { id: 'archive-2026', label: '2026', parentId: 'archive', notebookId: ['methods'] },
+      ],
+      getCurrentNotebookId: () => 'methods',
+      escapeHTML: (value) => String(value),
+    };
+
+    app.syncSubcategoryOptions('', 'methods');
+    expect(childSelect.disabled).toBe(false);
+    expect(childSelect.value).toBe('');
+    expect(childSelect.innerHTML).toContain('Tasks');
+    expect(childSelect.innerHTML).not.toContain('2026');
+
+    parentSelect.value = 'archive';
+    app.syncSubcategoryOptions('', 'methods');
+    expect(childSelect.innerHTML).toContain('2026');
+    expect(childSelect.innerHTML).not.toContain('Tasks');
+  });
+
+  it('creates and selects a subcategory from the editor without widening its scope', async () => {
+    globalThis.window = { CMS_CONFIG: {} };
+    globalThis.prompt = () => 'Follow-up';
+    const { categoryMethods } = await import('./app/categories.js');
+    const calls = [];
+    const selected = [];
+    let autosaves = 0;
+    globalThis.document = {
+      getElementById: (id) => (id === 'noteCategory' ? { value: 'project' } : null),
+    };
+    const app = {
+      ...categoryMethods,
+      role: 'editor', draftNotebookId: 'methods',
+      _categories: [{ id: 'project', label: 'Project', notebookId: ['methods'] }],
+      closeMobileSheets() {},
+      api: async (...args) => { calls.push(args); return { id: 'follow-up', parentId: 'project' }; },
+      reloadCategories: async () => {},
+      setCategorySelection: (...args) => selected.push(args),
+      scheduleAutosave: () => { autosaves += 1; },
+      renderCategories() {}, renderMobileFilters() {}, toast() {},
+    };
+
+    await app.addEditorSubcategory();
+
+    expect(calls).toEqual([['POST', '/api/cms/categories', { label: 'Follow-up', parentId: 'project' }]]);
+    expect(selected).toEqual([['follow-up', 'methods']]);
+    expect(autosaves).toBe(1);
+  });
+
   it('filters notes by the selected Docs category', async () => {
     const { notesViewMethods } = await import('./app/notes-view.js');
     const app = {

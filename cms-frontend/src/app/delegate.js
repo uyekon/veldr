@@ -18,7 +18,10 @@ const clickActions = {
   'show-browse': (App) => App.showBrowse(),
   'toggle-star': (App, el) => App.toggleStar(Number(el.dataset.id)),
   'delete-note': (App, el) => App.deleteNoteDirect(Number(el.dataset.id)),
-  'open-note-modal': (App, el) => App.openNoteModal(el.dataset.id ? Number(el.dataset.id) : undefined),
+  'open-note-modal': (App, el) => {
+    if (el.closest('.mobile-drawer')) App.closeMobileDrawer();
+    App.openNoteModal(el.dataset.id ? Number(el.dataset.id) : undefined);
+  },
   'scroll-heading': (App, el) => {
     document.getElementById(`note-heading-${el.dataset.index}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   },
@@ -27,6 +30,9 @@ const clickActions = {
   'close-notebook-sheet': (App) => App.closeNotebookSheet(),
   'open-filter-sheet': (App) => App.openFilterSheet(),
   'close-filter-sheet': (App) => App.closeFilterSheet(),
+  'open-mobile-drawer': (App) => App.openMobileDrawer(),
+  'close-mobile-drawer': (App) => App.closeMobileDrawer(),
+  'toggle-mobile-drawer-section': (App, el) => App.toggleMobileDrawerSection(el.dataset.section),
   'close-mobile-sheets': (App) => App.closeMobileSheets(),
   'open-password-modal': (App) => App.openPasswordModal(),
   'close-password-modal': (App) => App.closePasswordModal(),

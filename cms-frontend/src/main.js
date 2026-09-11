@@ -130,9 +130,8 @@ const boot = () => {
         App.closeShortcutModal();
         return;
       }
-      const notebookSheet = document.getElementById('notebookSheet');
-      const filterSheet = document.getElementById('filterSheet');
-      if (notebookSheet?.classList.contains('mobile-sheet--active') || filterSheet?.classList.contains('mobile-sheet--active')) {
+      const mobileDrawer = document.getElementById('mobileDrawer');
+      if (mobileDrawer?.classList.contains('mobile-drawer--active')) {
         App.closeMobileSheets();
         return;
       }

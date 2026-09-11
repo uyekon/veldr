@@ -52,7 +52,7 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
   color:#fff;font-weight:600;font-size:13px;
 }
 .topnav__title{font-size:1.0625rem;font-weight:600;letter-spacing:-.02em}
-.topnav__mobile-current,.topnav__mobile-filter{display:none}
+.topnav__mobile-current,.topnav__mobile-filter,.topnav__mobile-menu{display:none}
 .topnav__menu{display:flex;align-items:center;gap:var(--s1);flex-wrap:nowrap}
 .topnav__link{
   padding:var(--s2) var(--s4);font-size:.875rem;font-weight:500;
@@ -537,23 +537,19 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
   :root{--topnav-h:158px}
   html,body{height:100vh;height:100dvh;overflow:hidden}
   .topnav{
-    height:var(--topnav-h);display:grid;grid-template-columns:auto minmax(0,1fr);
+    height:var(--topnav-h);display:grid;grid-template-columns:minmax(0,1fr) auto;
     grid-template-rows:42px 88px;gap:8px 10px;align-items:center;padding:8px var(--s4) 12px;
   }
   .topnav__brand{min-width:0}
   .topnav__logo{width:28px;height:28px}
   .topnav__title{font-size:1rem}
   .topnav__menu{display:none}
-  .topnav__mobile-current{
-    display:flex;align-items:center;justify-content:space-between;gap:var(--s2);
-    min-width:0;justify-self:end;max-width:190px;padding:8px 10px;
-    border:1px solid var(--c200);border-radius:9px;background:#fff;color:var(--c800);
-    font-family:var(--font-sans);font-size:.875rem;font-weight:600;box-shadow:var(--shadow-sm);
-  }
-  .topnav__mobile-current span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .topnav__mobile-current{display:none}
+  .topnav__mobile-menu{display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;border:1px solid #dce9e3;border-radius:11px;background:#fff;color:#31554b;font-size:21px;cursor:pointer;box-shadow:0 2px 8px rgb(43 83 71/.06)}
+  .topnav__mobile-menu[aria-expanded="true"]{color:#fff;background:var(--a600);border-color:var(--a600)}
   .topnav__actions{
     grid-column:1 / -1;width:100%;display:grid;
-    grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;align-items:center;
+    grid-template-columns:minmax(0,1fr) minmax(0,1.15fr) 42px;gap:8px;align-items:center;
   }
   .topnav__search{grid-column:1 / -1;min-width:0}
   .topnav__search-input{width:100%;height:40px;background:#fff}
@@ -565,10 +561,7 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
   }
   .topnav__mobile-whiteboard--active{color:#fff;background:var(--a600);border-color:var(--a600)}
   .topnav__mobile-filter{
-    display:inline-flex;align-items:center;justify-content:center;gap:6px;height:40px;
-    width:100%;padding:0 11px;border:1px solid var(--c200);border-radius:9px;background:#fff;
-    color:var(--c700);font-family:var(--font-sans);font-size:.8125rem;font-weight:600;
-    white-space:nowrap;cursor:pointer;
+    display:none;
   }
   .topnav__profile{display:flex;justify-content:center;align-items:center;min-width:0}
   .topnav__avatar{width:40px;height:40px}
@@ -686,6 +679,21 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
 }
 .mobile-sheet__tag--active{background:var(--a50);border-color:var(--a300);color:var(--a800);font-weight:600}
 .mobile-sheet-open{overflow:hidden}
+.mobile-drawer{display:none}
+@media(max-width:768px){
+  .mobile-drawer{position:fixed;inset:0 auto 0 0;z-index:210;display:flex;flex-direction:column;width:min(344px,88vw);overflow:hidden;background:#fbfdfc;border-right:1px solid #dce9e3;box-shadow:16px 0 44px rgb(24 63 51/.18);transform:translateX(-105%);transition:transform .24s var(--ease);pointer-events:none}
+  .mobile-drawer--active{transform:translateX(0);pointer-events:auto}
+  .mobile-drawer__header{position:relative;display:flex;align-items:center;justify-content:space-between;min-height:68px;padding:0 var(--s5);border-bottom:1px solid #e6eeeb;background:#fff}
+  .mobile-drawer__brand{display:flex;align-items:center;gap:10px;color:#193f35;font-size:1.0625rem;font-weight:700}.mobile-drawer__brand-mark{display:grid;width:30px;height:30px;place-items:center;border-radius:8px;background:linear-gradient(135deg,var(--a500),var(--a700));color:#fff;font-size:.8125rem}
+  .mobile-drawer__close{width:34px;height:34px;border:0;border-radius:9px;background:#f2f7f4;color:#48655d;font-size:21px;cursor:pointer}
+  .mobile-drawer__body{flex:1;overflow-y:auto;padding:var(--s4) var(--s4) var(--s8)}
+  .mobile-drawer__quick{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:var(--s5)}
+  .mobile-drawer__quick button{min-height:42px;padding:0 10px;border:1px solid #dce9e3;border-radius:10px;background:#fff;color:#31554b;font:600 .8125rem var(--font-sans);cursor:pointer}.mobile-drawer__quick button:first-child{grid-column:span 2;background:#effaf4;border-color:#d4f2e2;color:#25734f}.mobile-drawer__quick button:last-child{color:#fff;background:var(--a600);border-color:var(--a600)}
+  .mobile-drawer__section{padding:var(--s4) 0;border-top:1px solid #e6eeeb}.mobile-drawer__section:first-of-type{border-top:0}
+  .mobile-drawer__section-toggle{display:flex;align-items:center;justify-content:space-between;width:100%;padding:3px 2px 10px;border:0;background:transparent;color:#66827b;font:700 .75rem var(--font-sans);letter-spacing:.05em;text-align:left;text-transform:uppercase;cursor:pointer}.mobile-drawer__section-toggle span:last-child{font-size:1rem;transition:transform .18s var(--ease)}
+  .mobile-drawer__section--collapsed .mobile-drawer__section-content{display:none}.mobile-drawer__section--collapsed .mobile-drawer__section-toggle span:last-child{transform:rotate(-90deg)}
+  .mobile-drawer .mobile-sheet__item{min-height:42px;padding:9px 10px;border-radius:9px}.mobile-drawer .mobile-sheet__tag-grid{gap:7px}.mobile-drawer .mobile-sheet__tag{min-height:32px;padding:4px 9px}.mobile-drawer .mobile-sheet__add{display:flex}.mobile-drawer .mobile-sheet__section{margin:0}
+}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
 </style>
 </head>
@@ -697,10 +705,7 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
     <div class="topnav__logo">N</div>
     <span class="topnav__title">NoteFlow</span>
   </a>
-  <button class="topnav__mobile-current" id="mobileNotebookBtn" data-action="open-notebook-sheet" type="button" aria-label="Switch notebook">
-    <span id="mobileNotebookLabel">Docs</span>
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-  </button>
+  <button class="topnav__mobile-menu" id="mobileMenuBtn" data-action="open-mobile-drawer" type="button" aria-label="打开菜单" aria-expanded="false">☰</button>
   <div class="topnav__menu" id="topMenu">
     <!-- Dynamically rendered -->
   </div>
@@ -726,41 +731,48 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
 
 <div class="overlay" id="sidebarOverlay" data-action="close-mobile-sheets"></div>
 
-<section class="mobile-sheet" id="notebookSheet" aria-label="Notebooks">
-  <div class="mobile-sheet__handle"></div>
-  <div class="mobile-sheet__header">
-    <div class="mobile-sheet__title">笔记本</div>
-    <button class="mobile-sheet__close" data-action="close-notebook-sheet" type="button">×</button>
+<aside class="mobile-drawer" id="mobileDrawer" aria-label="移动端导航" aria-hidden="true">
+  <div class="mobile-drawer__header">
+    <div class="mobile-drawer__brand"><span class="mobile-drawer__brand-mark">N</span> NoteFlow</div>
+    <button class="mobile-drawer__close" data-action="close-mobile-drawer" type="button" aria-label="关闭菜单">×</button>
   </div>
-  <div class="mobile-sheet__body">
-    <button class="mobile-sheet__item" data-action="open-whiteboard" type="button">
-      <span>白板</span>
-      <span class="mobile-sheet__item-count">备忘</span>
-    </button>
-    <div id="mobileNotebookList"></div>
-    <button class="mobile-sheet__add" id="mobileAddNotebookBtn" data-action="add-menu" type="button">+ 新建 Notebook</button>
-    <button class="mobile-sheet__add" id="mobilePasswordBtn" data-action="open-password-modal" type="button">修改编辑密码</button>
-  </div>
-</section>
-
-<section class="mobile-sheet" id="filterSheet" aria-label="Filters">
-  <div class="mobile-sheet__handle"></div>
-  <div class="mobile-sheet__header">
-    <div class="mobile-sheet__title">筛选</div>
-    <button class="mobile-sheet__close" data-action="close-filter-sheet" type="button">×</button>
-  </div>
-  <div class="mobile-sheet__body">
-    <div class="mobile-sheet__section">
-      <div class="mobile-sheet__label">分类</div>
-      <div id="mobileFilterList"></div>
-      <button class="mobile-sheet__add" id="mobileAddCategoryBtn" data-action="add-category" type="button" style="display:none">+ 新建分类</button>
+  <div class="mobile-drawer__body">
+    <div class="mobile-drawer__quick">
+      <button data-action="set-filter" data-filter="all" type="button">全部笔记</button>
+      <button data-action="open-whiteboard" type="button">白板</button>
+      <button data-action="open-note-modal" type="button">+ 新建笔记</button>
     </div>
-    <div class="mobile-sheet__section">
-      <div class="mobile-sheet__label">标签</div>
-      <div class="mobile-sheet__tag-grid" id="mobileTagsList"></div>
-    </div>
+    <section class="mobile-drawer__section" id="mobileDrawerNotebooks">
+      <button class="mobile-drawer__section-toggle" data-action="toggle-mobile-drawer-section" data-section="mobileDrawerNotebooks" type="button"><span>笔记本</span><span>⌃</span></button>
+      <div class="mobile-drawer__section-content">
+        <div id="mobileNotebookList"></div>
+        <button class="mobile-sheet__add" id="mobileAddNotebookBtn" data-action="add-menu" type="button">+ 新建 Notebook</button>
+      </div>
+    </section>
+    <section class="mobile-drawer__section" id="mobileDrawerFilters">
+      <button class="mobile-drawer__section-toggle" data-action="toggle-mobile-drawer-section" data-section="mobileDrawerFilters" type="button"><span>筛选与分类</span><span>⌃</span></button>
+      <div class="mobile-drawer__section-content">
+        <div class="mobile-sheet__section">
+          <div class="mobile-sheet__label">分类</div>
+          <div id="mobileFilterList"></div>
+          <button class="mobile-sheet__add" id="mobileAddCategoryBtn" data-action="add-category" type="button" style="display:none">+ 新建分类</button>
+        </div>
+      </div>
+    </section>
+    <section class="mobile-drawer__section" id="mobileDrawerTags">
+      <button class="mobile-drawer__section-toggle" data-action="toggle-mobile-drawer-section" data-section="mobileDrawerTags" type="button"><span>标签</span><span>⌃</span></button>
+      <div class="mobile-drawer__section-content">
+        <div class="mobile-sheet__tag-grid" id="mobileTagsList"></div>
+      </div>
+    </section>
+    <section class="mobile-drawer__section" id="mobileDrawerAccount">
+      <button class="mobile-drawer__section-toggle" data-action="toggle-mobile-drawer-section" data-section="mobileDrawerAccount" type="button"><span>账户</span><span>⌃</span></button>
+      <div class="mobile-drawer__section-content">
+        <button class="mobile-sheet__add" id="mobilePasswordBtn" data-action="open-password-modal" type="button">修改编辑密码</button>
+      </div>
+    </section>
   </div>
-</section>
+</aside>
 
 <!-- Layout -->
 <div class="layout">

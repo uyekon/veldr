@@ -31,44 +31,50 @@ export const uiMethods = {
     if (overlay) overlay.classList.toggle('overlay--active', Boolean(on));
   },
 
-  openNotebookSheet() {
+  openMobileDrawer(sectionId) {
     this.renderMobileNotebooks();
     this.renderMobileFilters();
-    document.getElementById('filterSheet')?.classList.remove('mobile-sheet--active');
-    const sheet = document.getElementById('notebookSheet');
-    sheet?.classList.add('mobile-sheet--active');
-    const body = sheet?.querySelector('.mobile-sheet__body');
+    const drawer = document.getElementById('mobileDrawer');
+    drawer?.classList.add('mobile-drawer--active');
+    drawer?.setAttribute('aria-hidden', 'false');
+    document.getElementById('mobileMenuBtn')?.setAttribute('aria-expanded', 'true');
+    if (sectionId) document.getElementById(sectionId)?.classList.remove('mobile-drawer__section--collapsed');
+    const body = drawer?.querySelector('.mobile-drawer__body');
     if (body) body.scrollTop = 0;
     this.setMobileSheetLock(true);
+  },
+
+  closeMobileDrawer() {
+    const drawer = document.getElementById('mobileDrawer');
+    drawer?.classList.remove('mobile-drawer--active');
+    drawer?.setAttribute('aria-hidden', 'true');
+    document.getElementById('mobileMenuBtn')?.setAttribute('aria-expanded', 'false');
+    this.setMobileSheetLock(false);
+  },
+
+  toggleMobileDrawerSection(sectionId) {
+    document.getElementById(sectionId)?.classList.toggle('mobile-drawer__section--collapsed');
+  },
+
+  openNotebookSheet() {
+    this.openMobileDrawer('mobileDrawerNotebooks');
   },
 
   closeNotebookSheet() {
-    document.getElementById('notebookSheet')?.classList.remove('mobile-sheet--active');
-    const filterOpen = document.getElementById('filterSheet')?.classList.contains('mobile-sheet--active');
-    this.setMobileSheetLock(filterOpen);
+    this.closeMobileDrawer();
   },
 
   openFilterSheet() {
-    this.renderMobileFilters();
-    document.getElementById('notebookSheet')?.classList.remove('mobile-sheet--active');
-    const sheet = document.getElementById('filterSheet');
-    sheet?.classList.add('mobile-sheet--active');
-    const body = sheet?.querySelector('.mobile-sheet__body');
-    if (body) body.scrollTop = 0;
-    this.setMobileSheetLock(true);
+    this.openMobileDrawer('mobileDrawerFilters');
   },
 
   closeFilterSheet() {
-    document.getElementById('filterSheet')?.classList.remove('mobile-sheet--active');
-    const notebookOpen = document.getElementById('notebookSheet')?.classList.contains('mobile-sheet--active');
-    this.setMobileSheetLock(notebookOpen);
+    this.closeMobileDrawer();
   },
 
   closeMobileSheets() {
-    document.getElementById('notebookSheet')?.classList.remove('mobile-sheet--active');
-    document.getElementById('filterSheet')?.classList.remove('mobile-sheet--active');
+    this.closeMobileDrawer();
     document.getElementById('sidebar')?.classList.remove('sidebar--open');
-    this.setMobileSheetLock(false);
   },
 
   toast(msg) {

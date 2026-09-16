@@ -315,6 +315,26 @@ export const editorMethods = {
     catch (error) { note.pinned = !pinned; this.renderNotes(); this.toast(error.message); }
   },
 
+  async toggleArchive(id) {
+    if (this.role !== 'editor') return;
+    const note = this._notes.find((item) => item.id === id);
+    if (!note) return;
+    const archived = (note.tags || []).some((tag) => String(tag).toLowerCase() === 'archived');
+    const tags = (note.tags || []).filter((tag) => String(tag).toLowerCase() !== 'archived');
+    if (!archived) tags.push('archived');
+    const previousTags = note.tags;
+    note.tags = tags;
+    this.updateCounts(); this.renderTags(); this.renderNotes();
+    try {
+      await this.api('PUT', apiPath(`/notes/${id}`), { tags });
+      this.toast(archived ? '文章已取消归档' : '文章已归档');
+    } catch (error) {
+      note.tags = previousTags;
+      this.updateCounts(); this.renderTags(); this.renderNotes();
+      this.toast(error.message || '归档操作失败');
+    }
+  },
+
   hasUnsavedEditorInput() {
     if (this.autosaveDirty) return true;
     if (this.editingNoteId) return false;

@@ -138,15 +138,30 @@ describe('NoteFlow administrator access', () => {
       .expect(({ body }) => expect(body).toMatchObject({ content: '买牛奶', version: 2 }));
   });
 
-  it('supports diary archives and converting the current diary into an article', async () => {
+  it('archives the diary as an article and clears the whiteboard', async () => {
+    resetDBForTests({
+      notes: [],
+      menus: [{ id: 'docs', label: 'Docs', type: 'docs' }, { id: 'notebook_work', label: '工作本', type: 'notebook' }],
+      categories: [{ id: 'work', label: 'Work' }],
+    });
     const agent = await editor();
     const diary = await agent.put('/api/cms/whiteboards/n').send({ content: '今天完成了一个重要目标', version: 1 }).expect(200);
     expect(diary.body).toMatchObject({ id: 'n', name: '日记', content: '今天完成了一个重要目标' });
-    const archive = await agent.post('/api/cms/whiteboards/n/archives').send({ title: '周一记录' }).expect(201);
-    expect(archive.body).toMatchObject({ title: '周一记录', content: diary.body.content });
-    await agent.get(`/api/cms/whiteboards/n/archives/${archive.body.id}`).expect(200)
-      .expect(({ body }) => expect(body.content).toBe(diary.body.content));
-    await agent.post('/api/cms/notes').send({ title: '日记文章', content: diary.body.content, category: 'work' }).expect(201);
+    const archived = await agent.post('/api/cms/whiteboards/n/archive').send({
+      title: '周一记录', notebookId: 'notebook_work', category: 'work', tags: ['journal'],
+    }).expect(201);
+    expect(archived.body.note).toMatchObject({ title: '周一记录', content: diary.body.content, notebookId: 'notebook_work', category: 'work', tags: ['journal'] });
+    expect(archived.body.whiteboard).toMatchObject({ id: 'n', content: '', version: 3 });
+  });
+
+  it('hides archived notes unless the archived tag is explicitly filtered', async () => {
+    const agent = await editor();
+    const note = await agent.post('/api/cms/notes').send({ title: 'Old note', content: 'old', tags: ['archived'] }).expect(201);
+    await agent.post('/api/cms/notes').send({ title: 'Current note', content: 'current' }).expect(201);
+    await agent.get('/api/cms/notes').expect(200).expect(({ body }) => expect(body.map(({ id }) => id)).not.toContain(note.body.id));
+    await agent.get('/api/cms/notes?tag=archived').expect(200).expect(({ body }) => expect(body.map(({ id }) => id)).toContain(note.body.id));
+    await agent.put(`/api/cms/notes/${note.body.id}`).send({ tags: ['archived', 'work'], version: note.body.version }).expect(200);
+    await agent.get('/api/cms/notes?tag=work').expect(200).expect(({ body }) => expect(body.map(({ id }) => id)).not.toContain(note.body.id));
   });
 
   it('migrates the legacy whiteboard into t', async () => {

@@ -27,7 +27,7 @@ export const apiMethods = {
 
   async reloadNotes() {
     try {
-      this._notes = (await this.api('GET', apiPath('/notes'))) || [];
+      this._notes = (await this.api('GET', apiPath('/notes?includeArchived=1'))) || [];
       this.lastKnownNotesVersion = this.getNotesVersionFingerprint();
     } catch (e) { this.toast('加载笔记失败'); }
   },

@@ -85,8 +85,8 @@ export const whiteboardMethods = {
       statusEl.textContent = status || (state.dirty ? '有未保存的修改' : formatUpdatedAt(state.whiteboard.updatedAt));
     }
     if (this.activeWhiteboardId === 'n') {
+      this.renderDiaryNotebooks();
       this.renderDiaryCategories();
-      this.renderDiaryArchives();
     }
   },
 
@@ -151,61 +151,37 @@ export const whiteboardMethods = {
     if (this._categories.some((category) => category.id === current)) select.value = current;
   },
 
-  renderDiaryArchives() {
-    const list = document.getElementById('diaryArchives');
-    if (!list) return;
-    const archives = this.getWhiteboardState('n')?.whiteboard.archives || [];
-    list.innerHTML = archives.length ? archives.slice().reverse().map((archive) => `
-      <button class="diary__archive" type="button" data-action="restore-diary-archive" data-id="${this.escapeHTML(archive.id)}">
-        <span>${this.escapeHTML(archive.title || '日记归档')}</span>
-        <small>${this.escapeHTML(new Date(archive.createdAt).toLocaleString())}</small>
-      </button>`).join('') : '<span class="diary__empty">暂无归档</span>';
+  renderDiaryNotebooks() {
+    const select = document.getElementById('diaryArticleNotebook');
+    if (!select || !Array.isArray(this._menus)) return;
+    const current = select.value;
+    const notebooks = this._menus.filter((menu) => menu.type === 'notebook');
+    select.innerHTML = notebooks.map((menu) => `<option value="${this.escapeHTML(menu.id)}">${this.escapeHTML(menu.label)}</option>`).join('');
+    if (notebooks.some((menu) => menu.id === current)) select.value = current;
   },
 
   async archiveDiary() {
     if (this.activeWhiteboardId !== 'n' || this.role !== 'editor') return;
-    if (!await this.saveWhiteboard({ quiet: true })) return;
     const state = this.getWhiteboardState('n');
-    try {
-      const archive = await this.api('POST', apiPath('/whiteboards/n/archives'), {
-        title: document.getElementById('diaryArchiveTitle')?.value.trim() || '日记归档',
-        content: state.whiteboard.content,
-      });
-      state.whiteboard.archives = [...(state.whiteboard.archives || []), archive].slice(-100);
-      this.renderDiaryArchives();
-      this.toast('日记已归档');
-    } catch (error) { this.toast(error.message || '归档失败'); }
-  },
-
-  async restoreDiaryArchive(id) {
-    if (this.role !== 'editor') return;
-    const state = this.getWhiteboardState('n');
-    if (state.dirty && !confirm('当前日记有未保存修改，仍要载入归档吗？')) return;
-    try {
-      const archive = await this.api('GET', apiPath(`/whiteboards/n/archives/${encodeURIComponent(id)}`));
-      const textarea = document.getElementById('whiteboardContent');
-      if (textarea) textarea.value = archive.content || '';
-      state.whiteboard = { ...state.whiteboard, content: archive.content || '' };
-      state.dirty = true;
-      this.handleWhiteboardInput();
-      this.renderWhiteboardState('已载入归档，等待自动保存…');
-    } catch (error) { this.toast(error.message || '归档加载失败'); }
-  },
-
-  async saveDiaryAsArticle() {
-    if (this.activeWhiteboardId !== 'n' || this.role !== 'editor') return;
     const title = document.getElementById('diaryArticleTitle')?.value.trim();
-    const content = this.getWhiteboardState('n')?.whiteboard.content || '';
+    const notebookId = document.getElementById('diaryArticleNotebook')?.value;
     const category = document.getElementById('diaryArticleCategory')?.value;
     const tags = document.getElementById('diaryArticleTags')?.value.split(',').map((tag) => tag.trim()).filter(Boolean) || [];
     if (!title) { this.toast('请输入文章标题'); return; }
-    if (!content.trim()) { this.toast('日记内容为空'); return; }
+    if (!state.whiteboard.content.trim()) { this.toast('日记内容为空'); return; }
     if (!await this.saveWhiteboard({ quiet: true })) return;
     try {
-      await this.api('POST', apiPath('/notes'), { title, content, category, tags, notebookId: null });
+      const result = await this.api('POST', apiPath('/whiteboards/n/archive'), {
+        title, notebookId, category, tags,
+      });
+      state.whiteboard = result.whiteboard;
+      state.dirty = false;
+      const textarea = document.getElementById('whiteboardContent');
+      if (textarea) textarea.value = '';
       await this.reloadNotes();
-      this.toast('已保存为文章');
-    } catch (error) { this.toast(error.message || '保存文章失败'); }
+      this.renderWhiteboardState();
+      this.toast('已归档为文章，日记白板已清空');
+    } catch (error) { this.toast(error.message || '归档失败'); }
   },
 
   async selectWhiteboard(id) {

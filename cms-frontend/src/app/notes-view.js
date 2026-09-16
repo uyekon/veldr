@@ -19,10 +19,19 @@ export const notesViewMethods = {
     return menu && menu.type === 'notebook' ? menu.label : 'Docs';
   },
 
-  getScopedNotes() {
+  isArchivedNote(note) {
+    return (note?.tags || []).some((tag) => String(tag).toLowerCase() === 'archived');
+  },
+
+  getAllScopedNotes() {
     const notebookId = this.getCurrentNotebookId();
     if (!notebookId) return [...this._notes];
     return this._notes.filter(note => note.notebookId === notebookId);
+  },
+
+  getScopedNotes() {
+    const notes = this.getAllScopedNotes();
+    return this.currentFilter === 'tag:archived' ? notes.filter(note => this.isArchivedNote(note)) : notes.filter(note => !this.isArchivedNote(note));
   },
 
   getFilteredNotes() {
@@ -130,7 +139,8 @@ export const notesViewMethods = {
       note.starred ? '<span>⭐ 已收藏</span>' : '',
       note.pinned ? '<span>📌 已置顶</span>' : ''
     ].join('');
-    const editBtn = isEditor ? `<button class="btn btn--secondary" style="margin-left:auto" data-action="open-note-modal" data-id="${note.id}">✏️ 编辑</button>` : '';
+    const isArchived = (note.tags || []).some((tag) => String(tag).toLowerCase() === 'archived');
+    const editBtn = isEditor ? `<button class="btn btn--secondary" style="margin-left:auto" data-action="open-note-modal" data-id="${note.id}">✏️ 编辑</button><button class="btn btn--secondary" data-action="toggle-archive" data-id="${note.id}">${isArchived ? '取消归档' : '归档'}</button>` : '';
     const contentHTML = this.renderMarkdown(note.content);
     const isMobileDetail = window.matchMedia('(max-width:768px)').matches;
 
@@ -141,7 +151,7 @@ export const notesViewMethods = {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
             返回列表
           </button>
-          ${isEditor ? `<button class="detail-mobile__edit" data-action="open-note-modal" data-id="${note.id}">编辑</button>` : ''}
+          ${isEditor ? `<button class="detail-mobile__edit" data-action="open-note-modal" data-id="${note.id}">编辑</button><button class="detail-mobile__edit" data-action="toggle-archive" data-id="${note.id}">${isArchived ? '取消归档' : '归档'}</button>` : ''}
         </div>
         <p class="detail-mobile__eyebrow">${this.escapeHTML(notebookLabel)} / ${this.escapeHTML(categoryLabel)}</p>
         <h1 class="detail-mobile__title">${this.escapeHTML(note.title)}</h1>
@@ -269,6 +279,7 @@ export const notesViewMethods = {
             ${isEditor ? `<div class="note-card__actions">
               <button class="note-card__action-btn" title="切换收藏" data-action="toggle-star" data-id="${n.id}">${n.starred ? '⭐' : '☆'}</button>
               <button class="note-card__action-btn" title="切换置顶" data-action="toggle-pin" data-id="${n.id}">${n.pinned ? '📌' : '📍'}</button>
+              <button class="note-card__action-btn" title="${n.tags?.some((tag) => String(tag).toLowerCase() === 'archived') ? '取消归档' : '归档'}" data-action="toggle-archive" data-id="${n.id}">${n.tags?.some((tag) => String(tag).toLowerCase() === 'archived') ? '📂' : '🗃️'}</button>
               <button class="note-card__action-btn note-card__action-btn--delete" title="删除" data-action="delete-note" data-id="${n.id}">🗑</button>
             </div>` : ''}
           </div>

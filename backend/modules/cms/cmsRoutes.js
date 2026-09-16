@@ -105,6 +105,8 @@ const normalizeNoteMeta = (note) => ({
 // 带 private 标签的笔记仅编辑角色可见（大小写不敏感）
 const isPrivateNote = (note) => (Array.isArray(note.tags) ? note.tags : [])
   .some(tag => String(tag).trim().toLowerCase() === 'private');
+const isArchivedNote = (note) => (Array.isArray(note.tags) ? note.tags : [])
+  .some(tag => String(tag).trim().toLowerCase() === 'archived');
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -220,31 +222,35 @@ router.put('/whiteboards/:id', editor, asyncHandler(async (req, res) => {
   return updateWhiteboard(req, res, req.params.id);
 }));
 
-router.post('/whiteboards/:id/archives', editor, asyncHandler(async (req, res) => {
-  if (!whiteboardIds.includes(req.params.id)) return send(res, 404, { error: 'Whiteboard not found' });
+router.post('/whiteboards/n/archive', editor, asyncHandler(async (req, res) => {
   const db = await loadDB();
-  const whiteboard = findWhiteboard(db, req.params.id);
-  const content = typeof req.body?.content === 'string' ? req.body.content : whiteboard.content;
-  if (!content.trim()) return send(res, 400, { error: 'Cannot archive an empty whiteboard' });
-  const archive = {
-    id: `archive_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    title: String(req.body?.title || whiteboardNames[req.params.id] || req.params.id).trim().slice(0, 120),
-    content,
-    version: Number(whiteboard.version) || 1,
-    createdAt: nowIso(),
+  const body = req.body || {};
+  const whiteboard = findWhiteboard(db, 'n');
+  const title = String(body.title || '').trim();
+  const content = String(whiteboard.content || '');
+  const notebookId = String(body.notebookId || '').trim();
+  if (!title || !content.trim()) return send(res, 400, { error: 'Title and diary content are required' });
+  if (!notebookId || !db.menus.some(menu => menu.id === notebookId && menu.type === 'notebook')) {
+    return send(res, 400, { error: 'A valid notebook is required' });
+  }
+  const category = String(body.category || '').trim() || db.categories[0]?.id || 'work';
+  if (!db.categories.some(item => item.id === category)) return send(res, 400, { error: 'Category not found' });
+  const timestamp = nowIso();
+  const note = {
+    id: nextId(db.notes), title: title.slice(0, 200), category, notebookId,
+    tags: normalizeTags(body.tags), date: body.date || timestamp.split('T')[0],
+    readTime: `${Math.max(1, Math.ceil(content.length / 500))} min`,
+    excerpt: markdownExcerpt(content), desc: normalizeDescription(body.desc),
+    starred: false, pinned: false, content, version: 1,
+    createdAt: timestamp, updatedAt: timestamp,
   };
-  whiteboard.archives = [...(Array.isArray(whiteboard.archives) ? whiteboard.archives : []), archive].slice(-100);
+  bindNotebookToCategoryAncestors(db, category, notebookId);
+  db.notes.unshift(note);
+  whiteboard.content = '';
+  whiteboard.version = (Number(whiteboard.version) || 1) + 1;
+  whiteboard.updatedAt = timestamp;
   await persistDB();
-  return send(res, 201, archive);
-}));
-
-router.get('/whiteboards/:id/archives/:archiveId', editor, asyncHandler(async (req, res) => {
-  if (!whiteboardIds.includes(req.params.id)) return send(res, 404, { error: 'Whiteboard not found' });
-  const db = await loadDB();
-  const whiteboard = findWhiteboard(db, req.params.id);
-  const archive = (whiteboard.archives || []).find((item) => item.id === req.params.archiveId);
-  if (!archive) return send(res, 404, { error: 'Archive not found' });
-  return send(res, 200, archive);
+  return send(res, 201, { note, whiteboard: publicWhiteboard(whiteboard) });
 }));
 
 router.get('/whiteboard', editor, asyncHandler(async (_req, res) => {
@@ -258,11 +264,14 @@ router.get('/notes', viewer, asyncHandler(async (req, res) => {
   const db = await loadDB();
   let notes = db.notes.map(note => ({ ...note, ...normalizeNoteMeta(note) }));
   if (req.cmsRole !== 'editor') notes = notes.filter(note => !isPrivateNote(note));
-  const { category, tag, search, star, notebookId } = req.query;
+  const { category, tag, search, star, notebookId, includeArchived } = req.query;
+
+  if (includeArchived !== '1' && tag !== 'archived') notes = notes.filter(note => !isArchivedNote(note));
+  if (tag === 'archived') notes = notes.filter(note => isArchivedNote(note));
 
   if (notebookId) notes = notes.filter(note => note.notebookId === notebookId);
   if (category) notes = notes.filter(note => note.category === category);
-  if (tag) notes = notes.filter(note => Array.isArray(note.tags) && note.tags.includes(tag));
+  if (tag && tag !== 'archived') notes = notes.filter(note => Array.isArray(note.tags) && note.tags.includes(tag));
   if (star === '1' || star === 'true') notes = notes.filter(note => note.starred);
   if (search) {
     const query = String(search).toLowerCase();

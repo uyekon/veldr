@@ -7,8 +7,6 @@ const clickActions = {
   'select-whiteboard': (App, el) => App.selectWhiteboard(el.dataset.id),
   'save-whiteboard': (App) => App.saveWhiteboard(),
   'archive-diary': (App) => App.archiveDiary(),
-  'restore-diary-archive': (App, el) => App.restoreDiaryArchive(el.dataset.id),
-  'save-diary-article': (App) => App.saveDiaryAsArticle(),
   'add-menu': (App) => App.addMenu(),
   'rename-menu': (App, el) => App.renameMenu(el.dataset.id),
   'delete-menu': (App, el) => App.deleteMenu(el.dataset.id),
@@ -22,6 +20,7 @@ const clickActions = {
   'show-browse': (App) => App.showBrowse(),
   'toggle-star': (App, el) => App.toggleStar(Number(el.dataset.id)),
   'toggle-pin': (App, el) => App.togglePin(Number(el.dataset.id)),
+  'toggle-archive': (App, el) => App.toggleArchive(Number(el.dataset.id)),
   'delete-note': (App, el) => App.deleteNoteDirect(Number(el.dataset.id)),
   'open-note-modal': (App, el) => {
     if (el.closest('.mobile-drawer')) App.closeMobileDrawer();

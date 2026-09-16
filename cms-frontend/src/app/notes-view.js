@@ -1,5 +1,10 @@
 // ===== 浏览视图：筛选、列表、详情、目录 =====
 export const notesViewMethods = {
+  getNotebookScopeKey(notebookId) {
+    if (!Array.isArray(notebookId) || notebookId.length === 0) return '';
+    return [...new Set(notebookId.map((id) => String(id || '').trim()).filter(Boolean))].sort().join('|');
+  },
+
   getCurrentMenu() {
     return this._menus.find(menu => menu.id === this.currentNav) || null;
   },
@@ -30,7 +35,7 @@ export const notesViewMethods = {
       const refCat = this._categories.find(c => c.id === categoryId);
       const allGroupIds = refCat
         ? this._categories
-            .filter(c => c.label === refCat.label && (c.notebookId || null) === (refCat.notebookId || null))
+            .filter(c => c.label === refCat.label && this.getNotebookScopeKey(c.notebookId) === this.getNotebookScopeKey(refCat.notebookId))
             .flatMap(c => this.getCategorySubtreeIds(c.id))
         : [];
       const uniqueIds = allGroupIds.length

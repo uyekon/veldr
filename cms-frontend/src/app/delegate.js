@@ -49,6 +49,7 @@ const clickActions = {
   'upload-image': (App) => App.uploadImage(),
   'upload-video': (App) => App.uploadVideo(),
   'open-media-library': (App) => App.openMediaLibrary(),
+  'delete-media': (App, el) => App.deleteMedia(el.dataset.id),
   'upload-gallery': (App) => App.uploadGallery(),
   'delete-selected-image': (App) => App.deleteSelectedImage(),
   'set-image-layout': (App, el) => App.setImageLayout(el.dataset.imageLayout),

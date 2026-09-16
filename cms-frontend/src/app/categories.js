@@ -318,7 +318,8 @@ export const categoryMethods = {
       // Notebook view: only show categories belonging to current notebook.
       this._categories
         .filter(cat => {
-          if (notebookId && !(Array.isArray(cat.notebookId) && cat.notebookId.includes(notebookId))) return false;
+          const isGlobal = !Array.isArray(cat.notebookId) || cat.notebookId.length === 0;
+          if (notebookId && !isGlobal && !cat.notebookId.includes(notebookId)) return false;
           const ids = this.getCategorySubtreeIds(cat.id);
           return [...ids].some(id => scopedNotes.some(n => n.category === id));
         })

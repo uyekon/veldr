@@ -44,6 +44,30 @@ describe('notebook category sidebar', () => {
     expect(categoryList.innerHTML).not.toContain('Empty');
   });
 
+  it('keeps global categories visible in the mobile notebook filters', async () => {
+    globalThis.window = { CMS_CONFIG: {} };
+    const { categoryMethods } = await import('./app/categories.js');
+    const mobileFilterList = { innerHTML: '' };
+    const mobileTagsList = { innerHTML: '' };
+    globalThis.document = {
+      getElementById: (id) => ({ mobileFilterList, mobileTagsList }[id] || null),
+    };
+    const app = {
+      ...categoryMethods,
+      currentNav: 'methods', currentFilter: 'all',
+      _menus: [{ id: 'methods', label: 'Methods', type: 'notebook' }],
+      _categories: [{ id: 'makm', label: 'MakM', parentId: null, notebookId: [] }],
+      _notes: [{ id: 1, notebookId: 'methods', category: 'makm', tags: [] }],
+      getCurrentNotebookId: () => 'methods',
+      getScopedNotes() { return this._notes.filter(note => note.notebookId === 'methods'); },
+      escapeHTML: (value) => String(value),
+    };
+
+    app.renderMobileFilters();
+
+    expect(mobileFilterList.innerHTML).toContain('MakM');
+  });
+
   it('renders Docs categories without treating a Set as an array', async () => {
     globalThis.window = { CMS_CONFIG: {} };
     const { categoryMethods } = await import('./app/categories.js');
@@ -177,10 +201,14 @@ describe('notebook category sidebar', () => {
     const app = {
       ...notesViewMethods,
       currentFilter: 'category:makm', searchQuery: '',
-      _categories: [{ id: 'makm', label: 'MakM', parentId: null, notebookId: ['methods'] }],
+      _categories: [
+        { id: 'makm', label: 'MakM', parentId: null, notebookId: ['methods'] },
+        { id: 'makm-copy', label: 'MakM', parentId: null, notebookId: ['methods'] },
+      ],
       _notes: [
         { id: 1, category: 'makm', notebookId: 'methods', tags: [] },
         { id: 2, category: 'life', notebookId: 'methods', tags: [] },
+        { id: 3, category: 'makm-copy', notebookId: 'methods', tags: [] },
       ],
       getScopedNotes() { return this._notes; },
       isCategoryFilter: (filter) => filter.startsWith('category:'),
@@ -188,6 +216,6 @@ describe('notebook category sidebar', () => {
       getCategorySubtreeIds: (id) => new Set([id]),
     };
 
-    expect(app.getFilteredNotes().map(note => note.id)).toEqual([1]);
+    expect(app.getFilteredNotes().map(note => note.id)).toEqual([1, 3]);
   });
 });

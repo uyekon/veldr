@@ -73,9 +73,9 @@ export const whiteboardMethods = {
     const saveButton = document.getElementById('whiteboardSaveBtn');
     const statusEl = document.getElementById('whiteboardStatus');
     const title = document.getElementById('whiteboardTitle');
-    const diaryTools = document.getElementById('diaryTools');
+    const diaryConvertBtn = document.getElementById('diaryConvertBtn');
     if (title) title.textContent = WHITEBOARD_NAMES[this.activeWhiteboardId] || `白板 ${this.activeWhiteboardId}`;
-    if (diaryTools) diaryTools.style.display = this.activeWhiteboardId === 'n' ? '' : 'none';
+    if (diaryConvertBtn) diaryConvertBtn.style.display = this.activeWhiteboardId === 'n' && this.role === 'editor' ? '' : 'none';
     if (textarea) {
       textarea.readOnly = this.role !== 'editor';
       textarea.setAttribute('aria-label', `白板 ${this.activeWhiteboardId} 内容`);
@@ -160,6 +160,19 @@ export const whiteboardMethods = {
     if (notebooks.some((menu) => menu.id === current)) select.value = current;
   },
 
+  openDiaryArchiveModal() {
+    if (this.activeWhiteboardId !== 'n' || this.role !== 'editor') return;
+    if (!this.getWhiteboardState('n').whiteboard.content.trim()) { this.toast('日记内容为空'); return; }
+    this.renderDiaryNotebooks();
+    this.renderDiaryCategories();
+    document.getElementById('diaryArchiveModal')?.classList.add('modal-overlay--active');
+    document.getElementById('diaryArticleTitle')?.focus();
+  },
+
+  closeDiaryArchiveModal() {
+    document.getElementById('diaryArchiveModal')?.classList.remove('modal-overlay--active');
+  },
+
   async archiveDiary() {
     if (this.activeWhiteboardId !== 'n' || this.role !== 'editor') return;
     const state = this.getWhiteboardState('n');
@@ -179,6 +192,8 @@ export const whiteboardMethods = {
       const textarea = document.getElementById('whiteboardContent');
       if (textarea) textarea.value = '';
       await this.reloadNotes();
+      this.closeDiaryArchiveModal();
+      ['diaryArticleTitle', 'diaryArticleTags'].forEach((id) => { const field = document.getElementById(id); if (field) field.value = ''; });
       this.renderWhiteboardState();
       this.toast('已归档为文章，日记白板已清空');
     } catch (error) { this.toast(error.message || '归档失败'); }

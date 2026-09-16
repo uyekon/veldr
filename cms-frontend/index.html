@@ -281,10 +281,8 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
 .whiteboard__title{font-size:2rem;font-weight:700;letter-spacing:-.03em;color:var(--c900);line-height:1.2}
 .whiteboard__desc{max-width:600px;margin-top:var(--s3);font-size:1rem;color:var(--c500);line-height:1.7}
 .whiteboard__save{flex:0 0 auto;margin-top:var(--s2)}
+.whiteboard__actions{display:flex;gap:var(--s3);flex:0 0 auto;margin-top:var(--s2)}
 .whiteboard__mobile-switcher{display:none}
-.diary-tools{display:grid;gap:var(--s4);margin-bottom:var(--s5);padding:var(--s5);background:var(--a50);border:1px solid var(--a200);border-radius:12px}
-.diary-tools__row{display:flex;gap:var(--s3);flex-wrap:wrap}
-.diary-tools__input,.diary-tools__select{flex:1;min-width:180px;padding:9px 11px;border:1px solid var(--c200);border-radius:7px;background:#fff;color:var(--c800);font:inherit}
 .whiteboard-switcher{display:grid;gap:var(--s2)}
 .whiteboard-switcher__button{width:100%;display:flex;align-items:center;justify-content:space-between;gap:var(--s2);padding:var(--s3);border:1px solid var(--c200);border-radius:8px;background:#fff;color:var(--c600);font:600 .875rem var(--font-sans);text-align:left;cursor:pointer;transition:all .15s var(--ease)}
 .whiteboard-switcher__button:hover{border-color:var(--a300);background:var(--a50);color:var(--a800)}
@@ -336,6 +334,7 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
 }
 .modal__close:hover{background:var(--c200);color:var(--c900)}
 .modal__body{padding:var(--s6)}
+.modal__actions{display:flex;justify-content:flex-end;gap:var(--s3);margin-top:var(--s6)}
 .modal__body > div[style*="display:flex"]{display:flex!important;flex-wrap:wrap;gap:var(--s4)!important}
 .modal__body > div[style*="display:flex"] > .modal__field{flex:1 1 180px!important;min-width:0}
 .modal__field{margin-bottom:var(--s5)}
@@ -569,10 +568,6 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
   .topnav__profile{display:flex;justify-content:center;align-items:center;min-width:0}
   .topnav__avatar{width:40px;height:40px}
   .topnav__profile-menu{right:0;min-width:190px}
-  .diary-tools{padding:var(--s4)}
-  .diary-tools__row{display:grid;grid-template-columns:1fr;gap:var(--s3)}
-  .diary-tools__input,.diary-tools__select{width:100%;min-width:0}
-  .diary-tools .btn{width:100%}
   .topnav__role{display:none!important}
   .topnav__btn{height:40px;width:100%;padding:0 10px;border-radius:9px;font-size:.8125rem}
   .topnav__logout{height:40px;width:100%;padding:0 10px;border-radius:9px;font-size:.8125rem;background:#fff}
@@ -623,7 +618,8 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
   .whiteboard__mobile-switcher{display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));gap:var(--s2);margin-bottom:var(--s5)}
   .whiteboard__mobile-switcher .whiteboard-switcher__button{min-width:0;flex-direction:column;align-items:flex-start;padding:var(--s3)}
   .whiteboard__mobile-switcher .whiteboard-switcher__button small{overflow:hidden;max-width:100%;text-overflow:ellipsis}
-  .whiteboard__save{width:100%;margin-top:0}
+  .whiteboard__actions{width:100%;margin-top:0}
+  .whiteboard__save{flex:1;margin-top:0}
   .whiteboard__surface{min-height:calc(100dvh - var(--topnav-h) - 260px)}
   .whiteboard__textarea{min-height:360px;padding:var(--s4)}
 }
@@ -815,18 +811,12 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
           <h1 class="whiteboard__title" id="whiteboardTitle">白板</h1>
           <p class="whiteboard__desc">随手记录待办、想法和临时备注。内容会自动保存到你的 CMS。</p>
         </div>
-        <button class="btn btn--primary whiteboard__save" id="whiteboardSaveBtn" type="button" data-action="save-whiteboard">保存白板</button>
+        <div class="whiteboard__actions">
+          <button class="btn btn--secondary whiteboard__save" id="whiteboardSaveBtn" type="button" data-action="save-whiteboard">保存</button>
+          <button class="btn btn--primary whiteboard__save" id="diaryConvertBtn" type="button" data-action="open-diary-archive" style="display:none">转为文章</button>
+        </div>
       </div>
       <div class="whiteboard__mobile-switcher" id="whiteboardMobileSwitcher" aria-label="切换白板"></div>
-      <section class="diary-tools" id="diaryTools" style="display:none" aria-label="日记工具">
-        <div class="diary-tools__row">
-          <input class="diary-tools__input" id="diaryArticleTitle" placeholder="文章标题">
-          <select class="diary-tools__select" id="diaryArticleNotebook" aria-label="文章 Notebook"></select>
-          <select class="diary-tools__select" id="diaryArticleCategory" aria-label="文章分类"></select>
-          <input class="diary-tools__input" id="diaryArticleTags" placeholder="标签，逗号分隔">
-          <button class="btn btn--primary" type="button" data-action="archive-diary">归档为文章并清空白板</button>
-        </div>
-      </section>
       <div class="whiteboard__surface">
         <textarea class="whiteboard__textarea" id="whiteboardContent" placeholder="在这里快速记录…" aria-label="白板内容" spellcheck="true"></textarea>
         <div class="whiteboard__footer">
@@ -848,6 +838,23 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
       </div>
     </div>
   </nav>
+</div>
+
+<!-- Diary to Article Modal -->
+<div class="modal-overlay" id="diaryArchiveModal" role="dialog" aria-modal="true" aria-labelledby="diaryArchiveTitle">
+  <div class="modal" style="max-width:560px">
+    <div class="modal__header">
+      <h3 class="modal__title" id="diaryArchiveTitle">转为文章</h3>
+      <button class="modal__close" type="button" data-action="close-diary-archive">✕</button>
+    </div>
+    <div class="modal__body">
+      <div class="modal__field"><label class="modal__label" for="diaryArticleTitle">文章标题</label><input class="modal__input" id="diaryArticleTitle" placeholder="输入文章标题..." required></div>
+      <div class="modal__field"><label class="modal__label" for="diaryArticleNotebook">Notebook</label><select class="modal__select" id="diaryArticleNotebook"></select></div>
+      <div class="modal__field"><label class="modal__label" for="diaryArticleCategory">分类</label><select class="modal__select" id="diaryArticleCategory"></select></div>
+      <div class="modal__field"><label class="modal__label" for="diaryArticleTags">标签（可选，逗号分隔）</label><input class="modal__input" id="diaryArticleTags" placeholder="例如: diary, work"></div>
+      <div class="modal__actions"><button class="btn btn--secondary" type="button" data-action="close-diary-archive">取消</button><button class="btn btn--primary" type="button" data-action="archive-diary">转为文章并清空白板</button></div>
+    </div>
+  </div>
 </div>
 
 <!-- New/Edit Note Modal -->

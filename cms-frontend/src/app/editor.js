@@ -305,6 +305,16 @@ export const editorMethods = {
     catch (error) { note.starred = !starred; this.updateCounts(); this.renderNotes(); this.toast(error.message); }
   },
 
+  async togglePin(id) {
+    if (this.role !== 'editor') return;
+    const note = this._notes.find((item) => item.id === id);
+    if (!note) return;
+    const pinned = !note.pinned;
+    note.pinned = pinned; this.renderNotes();
+    try { await this.api('PUT', apiPath(`/notes/${id}`), { pinned }); }
+    catch (error) { note.pinned = !pinned; this.renderNotes(); this.toast(error.message); }
+  },
+
   hasUnsavedEditorInput() {
     if (this.autosaveDirty) return true;
     if (this.editingNoteId) return false;

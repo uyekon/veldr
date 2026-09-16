@@ -18,6 +18,7 @@ const clickActions = {
   'show-detail': (App, el) => App.showDetail(Number(el.dataset.id)),
   'show-browse': (App) => App.showBrowse(),
   'toggle-star': (App, el) => App.toggleStar(Number(el.dataset.id)),
+  'toggle-pin': (App, el) => App.togglePin(Number(el.dataset.id)),
   'delete-note': (App, el) => App.deleteNoteDirect(Number(el.dataset.id)),
   'open-note-modal': (App, el) => {
     if (el.closest('.mobile-drawer')) App.closeMobileDrawer();

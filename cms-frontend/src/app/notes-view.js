@@ -127,7 +127,8 @@ export const notesViewMethods = {
       note.notebookId ? `<span>📚 ${this.escapeHTML(notebookLabel)}</span>` : '',
       `<span>📅 ${note.date}</span>`,
       `<span>⏱ ${note.readTime}阅读</span>`,
-      note.starred ? '<span>⭐ 已收藏</span>' : ''
+      note.starred ? '<span>⭐ 已收藏</span>' : '',
+      note.pinned ? '<span>📌 已置顶</span>' : ''
     ].join('');
     const editBtn = isEditor ? `<button class="btn btn--secondary" style="margin-left:auto" data-action="open-note-modal" data-id="${note.id}">✏️ 编辑</button>` : '';
     const contentHTML = this.renderMarkdown(note.content);
@@ -151,7 +152,7 @@ export const notesViewMethods = {
           <div><span>创建于</span><strong>${this.escapeHTML(note.createdAt || note.date || '—')}</strong></div>
           <div><span>最近更新</span><strong>${this.escapeHTML(note.updatedAt || note.date || '—')}</strong></div>
         </div>
-        ${(note.tags?.length || note.starred) ? `<div class="detail-mobile__chips">${(note.tags || []).map((tag) => `<span>#${this.escapeHTML(tag)}</span>`).join('')}${note.starred ? '<span>★ 已收藏</span>' : ''}</div>` : ''}
+        ${(note.tags?.length || note.starred || note.pinned) ? `<div class="detail-mobile__chips">${(note.tags || []).map((tag) => `<span>#${this.escapeHTML(tag)}</span>`).join('')}${note.starred ? '<span>★ 已收藏</span>' : ''}${note.pinned ? '<span>📌 已置顶</span>' : ''}</div>` : ''}
         <div class="detail-mobile__body"><div class="detail__content">${contentHTML}</div></div>
       </section>
     ` : `
@@ -199,13 +200,19 @@ export const notesViewMethods = {
   },
 
   // ===== 笔记列表渲染 =====
-  renderNotes() {
-    const notes = [...this.getFilteredNotes()].sort((a, b) => {
+  sortNotes(notes) {
+    return [...notes].sort((a, b) => {
+      const pinOrder = Number(Boolean(b.pinned)) - Number(Boolean(a.pinned));
+      if (pinOrder) return pinOrder;
       if (this.notesSort === 'title') return String(a.title || '').localeCompare(String(b.title || ''), 'zh-CN');
       if (this.notesSort === 'created') return String(b.createdAt || b.date || '').localeCompare(String(a.createdAt || a.date || ''));
       if (this.notesSort === 'starred') return Number(b.starred) - Number(a.starred) || String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''));
       return String(b.updatedAt || b.date || '').localeCompare(String(a.updatedAt || a.date || ''));
     });
+  },
+
+  renderNotes() {
+    const notes = this.sortNotes(this.getFilteredNotes());
     const isEditor = this.role === 'editor';
     const grid = document.getElementById('browseView');
 
@@ -261,6 +268,7 @@ export const notesViewMethods = {
             <div class="note-card__icon">${this.getIconSVG(n.id)}</div>
             ${isEditor ? `<div class="note-card__actions">
               <button class="note-card__action-btn" title="切换收藏" data-action="toggle-star" data-id="${n.id}">${n.starred ? '⭐' : '☆'}</button>
+              <button class="note-card__action-btn" title="切换置顶" data-action="toggle-pin" data-id="${n.id}">${n.pinned ? '📌' : '📍'}</button>
               <button class="note-card__action-btn note-card__action-btn--delete" title="删除" data-action="delete-note" data-id="${n.id}">🗑</button>
             </div>` : ''}
           </div>

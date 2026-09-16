@@ -88,7 +88,11 @@ const loadDB = async () => {
   }
 
   if (!Array.isArray(db.notes)) db.notes = [];
-  db.notes = db.notes.map(note => ({ ...note, desc: typeof note.desc === 'string' ? note.desc : '' }));
+  db.notes = db.notes.map(note => ({
+    ...note,
+    desc: typeof note.desc === 'string' ? note.desc : '',
+    pinned: Boolean(note.pinned),
+  }));
   if (!Array.isArray(db.categories)) db.categories = defaultDB().categories;
   db.categories = db.categories.map(category => {
   const nb = category.notebookId;

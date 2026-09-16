@@ -218,4 +218,16 @@ describe('notebook category sidebar', () => {
 
     expect(app.getFilteredNotes().map(note => note.id)).toEqual([1, 3]);
   });
+
+  it('always puts pinned notes first within the active filter', async () => {
+    const { notesViewMethods } = await import('./app/notes-view.js');
+    const app = { ...notesViewMethods, notesSort: 'title' };
+    const notes = [
+      { id: 1, title: 'A title', pinned: false },
+      { id: 2, title: 'Z title', pinned: true },
+      { id: 3, title: 'B title', pinned: true },
+    ];
+
+    expect(app.sortNotes(notes).map(note => note.id)).toEqual([3, 2, 1]);
+  });
 });

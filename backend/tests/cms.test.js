@@ -70,6 +70,15 @@ describe('NoteFlow administrator access', () => {
     await agent.delete(`/api/cms/notes/${note.body.id}`).expect(200);
   });
 
+  it('persists pinned notes and returns them first in a filtered list', async () => {
+    const agent = await editor();
+    const older = await agent.post('/api/cms/notes').send({ title: 'Older', content: 'first' }).expect(201);
+    await agent.post('/api/cms/notes').send({ title: 'Pinned', content: 'second', pinned: true }).expect(201);
+    await agent.put(`/api/cms/notes/${older.body.id}`).send({ pinned: true, version: older.body.version }).expect(200);
+    const notes = await agent.get('/api/cms/notes').expect(200);
+    expect(notes.body.filter((note) => note.pinned).map((note) => note.title)).toEqual(['Pinned', 'Older']);
+  });
+
   it('inherits subcategory notebook scope and repairs ancestor bindings from notes', async () => {
     resetDBForTests({
       notes: [],

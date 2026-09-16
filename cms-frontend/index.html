@@ -282,6 +282,13 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
 .whiteboard__desc{max-width:600px;margin-top:var(--s3);font-size:1rem;color:var(--c500);line-height:1.7}
 .whiteboard__save{flex:0 0 auto;margin-top:var(--s2)}
 .whiteboard__mobile-switcher{display:none}
+.diary-tools{display:grid;gap:var(--s4);margin-bottom:var(--s5);padding:var(--s5);background:var(--a50);border:1px solid var(--a200);border-radius:12px}
+.diary-tools__row{display:flex;gap:var(--s3);flex-wrap:wrap}
+.diary-tools__input,.diary-tools__select{flex:1;min-width:180px;padding:9px 11px;border:1px solid var(--c200);border-radius:7px;background:#fff;color:var(--c800);font:inherit}
+.diary__archives{display:grid;gap:var(--s2);max-height:180px;overflow:auto}
+.diary__archive{display:flex;justify-content:space-between;gap:var(--s3);padding:8px 10px;border:1px solid var(--c200);border-radius:7px;background:#fff;color:var(--c700);text-align:left;cursor:pointer}
+.diary__archive:hover{border-color:var(--a400);background:#fff}
+.diary__archive small,.diary__empty{color:var(--c400);font-size:.75rem}
 .whiteboard-switcher{display:grid;gap:var(--s2)}
 .whiteboard-switcher__button{width:100%;display:flex;align-items:center;justify-content:space-between;gap:var(--s2);padding:var(--s3);border:1px solid var(--c200);border-radius:8px;background:#fff;color:var(--c600);font:600 .875rem var(--font-sans);text-align:left;cursor:pointer;transition:all .15s var(--ease)}
 .whiteboard-switcher__button:hover{border-color:var(--a300);background:var(--a50);color:var(--a800)}
@@ -566,6 +573,10 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
   .topnav__profile{display:flex;justify-content:center;align-items:center;min-width:0}
   .topnav__avatar{width:40px;height:40px}
   .topnav__profile-menu{right:0;min-width:190px}
+  .diary-tools{padding:var(--s4)}
+  .diary-tools__row{display:grid;grid-template-columns:1fr;gap:var(--s3)}
+  .diary-tools__input,.diary-tools__select{width:100%;min-width:0}
+  .diary-tools .btn{width:100%}
   .topnav__role{display:none!important}
   .topnav__btn{height:40px;width:100%;padding:0 10px;border-radius:9px;font-size:.8125rem}
   .topnav__logout{height:40px;width:100%;padding:0 10px;border-radius:9px;font-size:.8125rem;background:#fff}
@@ -811,6 +822,19 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
         <button class="btn btn--primary whiteboard__save" id="whiteboardSaveBtn" type="button" data-action="save-whiteboard">保存白板</button>
       </div>
       <div class="whiteboard__mobile-switcher" id="whiteboardMobileSwitcher" aria-label="切换白板"></div>
+      <section class="diary-tools" id="diaryTools" style="display:none" aria-label="日记工具">
+        <div class="diary-tools__row">
+          <input class="diary-tools__input" id="diaryArchiveTitle" placeholder="归档名称（可选）">
+          <button class="btn btn--secondary" type="button" data-action="archive-diary">归档当前内容</button>
+        </div>
+        <div class="diary-tools__row">
+          <input class="diary-tools__input" id="diaryArticleTitle" placeholder="文章标题">
+          <select class="diary-tools__select" id="diaryArticleCategory" aria-label="文章分类"></select>
+          <input class="diary-tools__input" id="diaryArticleTags" placeholder="标签，逗号分隔">
+          <button class="btn btn--primary" type="button" data-action="save-diary-article">保存为文章</button>
+        </div>
+        <div><strong>归档记录</strong><div class="diary__archives" id="diaryArchives"></div></div>
+      </section>
       <div class="whiteboard__surface">
         <textarea class="whiteboard__textarea" id="whiteboardContent" placeholder="在这里快速记录…" aria-label="白板内容" spellcheck="true"></textarea>
         <div class="whiteboard__footer">

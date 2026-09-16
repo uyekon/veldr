@@ -1,6 +1,7 @@
 import { apiPath } from '../config.js';
 
-const WHITEBOARD_IDS = ['t', 'b', 'w', 'dailyPush'];
+const WHITEBOARD_IDS = ['t', 'b', 'w', 'dailyPush', 'n'];
+const WHITEBOARD_NAMES = { t: '白板', b: '白板 B', w: '白板 W', dailyPush: '每日推送', n: '日记' };
 
 const formatUpdatedAt = (value) => {
   if (!value) return '尚未保存';
@@ -9,7 +10,7 @@ const formatUpdatedAt = (value) => {
 };
 
 const createWhiteboardState = (id) => ({
-  whiteboard: { id, content: '', version: 1, updatedAt: null },
+  whiteboard: { id, content: '', version: 1, updatedAt: null, archives: [] },
   dirty: false,
   saveTimer: null,
   saveInFlight: false,
@@ -30,7 +31,7 @@ export const whiteboardMethods = {
   whiteboardItems() {
     return WHITEBOARD_IDS.map((id) => (
       this.whiteboards.find((whiteboard) => whiteboard.id === id)
-      || { id, name: id, updatedAt: this.getWhiteboardState(id)?.whiteboard.updatedAt || null }
+      || { id, name: WHITEBOARD_NAMES[id] || id, updatedAt: this.getWhiteboardState(id)?.whiteboard.updatedAt || null }
     ));
   },
 
@@ -51,7 +52,7 @@ export const whiteboardMethods = {
     const buttons = this.whiteboardItems().map((whiteboard) => {
       const active = whiteboard.id === this.activeWhiteboardId;
       return `<button class="whiteboard-switcher__button ${active ? 'whiteboard-switcher__button--active' : ''}" type="button" data-action="select-whiteboard" data-id="${whiteboard.id}" aria-pressed="${active}">
-        <span>${whiteboard.id}</span>
+        <span>${this.escapeHTML(whiteboard.name || WHITEBOARD_NAMES[whiteboard.id] || whiteboard.id)}</span>
         <small>${whiteboard.updatedAt ? formatUpdatedAt(whiteboard.updatedAt).replace('上次保存 ', '') : '尚未保存'}</small>
       </button>`;
     }).join('');
@@ -72,7 +73,9 @@ export const whiteboardMethods = {
     const saveButton = document.getElementById('whiteboardSaveBtn');
     const statusEl = document.getElementById('whiteboardStatus');
     const title = document.getElementById('whiteboardTitle');
-    if (title) title.textContent = `白板 ${this.activeWhiteboardId}`;
+    const diaryTools = document.getElementById('diaryTools');
+    if (title) title.textContent = WHITEBOARD_NAMES[this.activeWhiteboardId] || `白板 ${this.activeWhiteboardId}`;
+    if (diaryTools) diaryTools.style.display = this.activeWhiteboardId === 'n' ? '' : 'none';
     if (textarea) {
       textarea.readOnly = this.role !== 'editor';
       textarea.setAttribute('aria-label', `白板 ${this.activeWhiteboardId} 内容`);
@@ -81,6 +84,10 @@ export const whiteboardMethods = {
     if (statusEl) {
       statusEl.textContent = status || (state.dirty ? '有未保存的修改' : formatUpdatedAt(state.whiteboard.updatedAt));
     }
+    if (this.activeWhiteboardId === 'n') {
+      this.renderDiaryCategories();
+      this.renderDiaryArchives();
+    }
   },
 
   async loadWhiteboardList() {
@@ -88,7 +95,7 @@ export const whiteboardMethods = {
     this.whiteboardListLoadPromise = this.api('GET', apiPath('/whiteboards'))
       .then((whiteboards) => {
         this.whiteboards = WHITEBOARD_IDS.map((id) => (
-          whiteboards.find((whiteboard) => whiteboard.id === id) || { id, name: id, updatedAt: null }
+          whiteboards.find((whiteboard) => whiteboard.id === id) || { id, name: WHITEBOARD_NAMES[id] || id, updatedAt: null }
         ));
         this.renderWhiteboardSwitcher();
         return this.whiteboards;
@@ -128,10 +135,77 @@ export const whiteboardMethods = {
 
   updateWhiteboardMetadata(whiteboard) {
     const index = this.whiteboards.findIndex((item) => item.id === whiteboard.id);
-    const item = { id: whiteboard.id, name: whiteboard.id, updatedAt: whiteboard.updatedAt };
+    const item = { id: whiteboard.id, name: WHITEBOARD_NAMES[whiteboard.id] || whiteboard.id, updatedAt: whiteboard.updatedAt };
     if (index === -1) this.whiteboards.push(item);
     else this.whiteboards[index] = item;
     this.renderWhiteboardSwitcher();
+  },
+
+  renderDiaryCategories() {
+    const select = document.getElementById('diaryArticleCategory');
+    if (!select || !Array.isArray(this._categories)) return;
+    const current = select.value;
+    select.innerHTML = this._categories.map((category) => (
+      `<option value="${this.escapeHTML(category.id)}">${this.escapeHTML(`${'— '.repeat(this.getCategoryDepth(category))}${category.label}`)}</option>`
+    )).join('');
+    if (this._categories.some((category) => category.id === current)) select.value = current;
+  },
+
+  renderDiaryArchives() {
+    const list = document.getElementById('diaryArchives');
+    if (!list) return;
+    const archives = this.getWhiteboardState('n')?.whiteboard.archives || [];
+    list.innerHTML = archives.length ? archives.slice().reverse().map((archive) => `
+      <button class="diary__archive" type="button" data-action="restore-diary-archive" data-id="${this.escapeHTML(archive.id)}">
+        <span>${this.escapeHTML(archive.title || '日记归档')}</span>
+        <small>${this.escapeHTML(new Date(archive.createdAt).toLocaleString())}</small>
+      </button>`).join('') : '<span class="diary__empty">暂无归档</span>';
+  },
+
+  async archiveDiary() {
+    if (this.activeWhiteboardId !== 'n' || this.role !== 'editor') return;
+    if (!await this.saveWhiteboard({ quiet: true })) return;
+    const state = this.getWhiteboardState('n');
+    try {
+      const archive = await this.api('POST', apiPath('/whiteboards/n/archives'), {
+        title: document.getElementById('diaryArchiveTitle')?.value.trim() || '日记归档',
+        content: state.whiteboard.content,
+      });
+      state.whiteboard.archives = [...(state.whiteboard.archives || []), archive].slice(-100);
+      this.renderDiaryArchives();
+      this.toast('日记已归档');
+    } catch (error) { this.toast(error.message || '归档失败'); }
+  },
+
+  async restoreDiaryArchive(id) {
+    if (this.role !== 'editor') return;
+    const state = this.getWhiteboardState('n');
+    if (state.dirty && !confirm('当前日记有未保存修改，仍要载入归档吗？')) return;
+    try {
+      const archive = await this.api('GET', apiPath(`/whiteboards/n/archives/${encodeURIComponent(id)}`));
+      const textarea = document.getElementById('whiteboardContent');
+      if (textarea) textarea.value = archive.content || '';
+      state.whiteboard = { ...state.whiteboard, content: archive.content || '' };
+      state.dirty = true;
+      this.handleWhiteboardInput();
+      this.renderWhiteboardState('已载入归档，等待自动保存…');
+    } catch (error) { this.toast(error.message || '归档加载失败'); }
+  },
+
+  async saveDiaryAsArticle() {
+    if (this.activeWhiteboardId !== 'n' || this.role !== 'editor') return;
+    const title = document.getElementById('diaryArticleTitle')?.value.trim();
+    const content = this.getWhiteboardState('n')?.whiteboard.content || '';
+    const category = document.getElementById('diaryArticleCategory')?.value;
+    const tags = document.getElementById('diaryArticleTags')?.value.split(',').map((tag) => tag.trim()).filter(Boolean) || [];
+    if (!title) { this.toast('请输入文章标题'); return; }
+    if (!content.trim()) { this.toast('日记内容为空'); return; }
+    if (!await this.saveWhiteboard({ quiet: true })) return;
+    try {
+      await this.api('POST', apiPath('/notes'), { title, content, category, tags, notebookId: null });
+      await this.reloadNotes();
+      this.toast('已保存为文章');
+    } catch (error) { this.toast(error.message || '保存文章失败'); }
   },
 
   async selectWhiteboard(id) {

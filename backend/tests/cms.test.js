@@ -120,7 +120,7 @@ describe('NoteFlow administrator access', () => {
 
     const agent = await editor();
     await agent.get('/api/cms/whiteboards').expect(200)
-      .expect(({ body }) => expect(body.map((whiteboard) => whiteboard.id)).toEqual(['t', 'b', 'w', 'dailyPush']));
+      .expect(({ body }) => expect(body.map((whiteboard) => whiteboard.id)).toEqual(['t', 'b', 'w', 'dailyPush', 'n']));
     const t = await agent.put('/api/cms/whiteboards/t').send({ content: '买牛奶', version: 1 }).expect(200);
     const b = await agent.put('/api/cms/whiteboards/b').send({ content: '读书', version: 1 }).expect(200);
     const d = await agent.put('/api/cms/whiteboards/dailyPush').send({ content: '推送', version: 1 }).expect(200);
@@ -136,6 +136,17 @@ describe('NoteFlow administrator access', () => {
 
     await agent.get('/api/cms/whiteboard').expect(200)
       .expect(({ body }) => expect(body).toMatchObject({ content: '买牛奶', version: 2 }));
+  });
+
+  it('supports diary archives and converting the current diary into an article', async () => {
+    const agent = await editor();
+    const diary = await agent.put('/api/cms/whiteboards/n').send({ content: '今天完成了一个重要目标', version: 1 }).expect(200);
+    expect(diary.body).toMatchObject({ id: 'n', name: '日记', content: '今天完成了一个重要目标' });
+    const archive = await agent.post('/api/cms/whiteboards/n/archives').send({ title: '周一记录' }).expect(201);
+    expect(archive.body).toMatchObject({ title: '周一记录', content: diary.body.content });
+    await agent.get(`/api/cms/whiteboards/n/archives/${archive.body.id}`).expect(200)
+      .expect(({ body }) => expect(body.content).toBe(diary.body.content));
+    await agent.post('/api/cms/notes').send({ title: '日记文章', content: diary.body.content, category: 'work' }).expect(201);
   });
 
   it('migrates the legacy whiteboard into t', async () => {

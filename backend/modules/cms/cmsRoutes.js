@@ -7,7 +7,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { attachAuthState } from '../../middleware/auth.js';
 import { asyncHandler } from '../../middleware/errorHandler.js';
-import { loadDB, persistDB, nextId, normalizeTags, uploadDir, whiteboardIds } from './cmsStore.js';
+import { loadDB, persistDB, nextId, normalizeTags, uploadDir, whiteboardIds, whiteboardNames } from './cmsStore.js';
 import { requireEditor, requireViewer } from './cmsAuth.js';
 import { cleanupUnreferencedCmsUploads, extractCmsUploadFilenames } from './cmsImages.js';
 import { cleanupCmsUploads } from './cmsMaintenance.js';
@@ -162,9 +162,15 @@ router.get('/me', viewer, (req, res) => {
 
 const publicWhiteboard = (whiteboard) => ({
   id: whiteboard.id,
+  name: whiteboardNames[whiteboard.id] || whiteboard.id,
   content: whiteboard.content,
   version: whiteboard.version,
   updatedAt: whiteboard.updatedAt,
+  archives: Array.isArray(whiteboard.archives)
+    ? whiteboard.archives
+      .filter((archive) => archive && typeof archive === 'object')
+      .map(({ id, title, version, createdAt }) => ({ id, title, version, createdAt }))
+    : [],
 });
 
 const legacyWhiteboard = (whiteboard) => ({
@@ -200,7 +206,7 @@ const updateWhiteboard = async (req, res, id, legacyResponse = false) => {
 
 router.get('/whiteboards', editor, asyncHandler(async (_req, res) => {
   const db = await loadDB();
-  return send(res, 200, db.whiteboards.map(({ id, updatedAt }) => ({ id, name: id, updatedAt })));
+  return send(res, 200, db.whiteboards.map(({ id, updatedAt }) => ({ id, name: whiteboardNames[id] || id, updatedAt })));
 }));
 
 router.get('/whiteboards/:id', editor, asyncHandler(async (req, res) => {
@@ -212,6 +218,33 @@ router.get('/whiteboards/:id', editor, asyncHandler(async (req, res) => {
 router.put('/whiteboards/:id', editor, asyncHandler(async (req, res) => {
   if (!whiteboardIds.includes(req.params.id)) return send(res, 404, { error: 'Whiteboard not found' });
   return updateWhiteboard(req, res, req.params.id);
+}));
+
+router.post('/whiteboards/:id/archives', editor, asyncHandler(async (req, res) => {
+  if (!whiteboardIds.includes(req.params.id)) return send(res, 404, { error: 'Whiteboard not found' });
+  const db = await loadDB();
+  const whiteboard = findWhiteboard(db, req.params.id);
+  const content = typeof req.body?.content === 'string' ? req.body.content : whiteboard.content;
+  if (!content.trim()) return send(res, 400, { error: 'Cannot archive an empty whiteboard' });
+  const archive = {
+    id: `archive_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    title: String(req.body?.title || whiteboardNames[req.params.id] || req.params.id).trim().slice(0, 120),
+    content,
+    version: Number(whiteboard.version) || 1,
+    createdAt: nowIso(),
+  };
+  whiteboard.archives = [...(Array.isArray(whiteboard.archives) ? whiteboard.archives : []), archive].slice(-100);
+  await persistDB();
+  return send(res, 201, archive);
+}));
+
+router.get('/whiteboards/:id/archives/:archiveId', editor, asyncHandler(async (req, res) => {
+  if (!whiteboardIds.includes(req.params.id)) return send(res, 404, { error: 'Whiteboard not found' });
+  const db = await loadDB();
+  const whiteboard = findWhiteboard(db, req.params.id);
+  const archive = (whiteboard.archives || []).find((item) => item.id === req.params.archiveId);
+  if (!archive) return send(res, 404, { error: 'Archive not found' });
+  return send(res, 200, archive);
 }));
 
 router.get('/whiteboard', editor, asyncHandler(async (_req, res) => {

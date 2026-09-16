@@ -25,15 +25,24 @@ const repairFilenameEncoding = (name) => {
 let db = null;
 let writeChain = Promise.resolve();
 
-const whiteboardIds = ['t', 'b', 'w', 'dailyPush'];
+const whiteboardIds = ['t', 'b', 'w', 'dailyPush', 'n'];
 
-const defaultWhiteboard = (id) => ({ id, content: '', version: 1, updatedAt: null });
+const whiteboardNames = {
+  t: '白板',
+  b: '白板 B',
+  w: '白板 W',
+  dailyPush: '每日推送',
+  n: '日记',
+};
+
+const defaultWhiteboard = (id) => ({ id, content: '', version: 1, updatedAt: null, archives: [] });
 
 const normalizeWhiteboard = (id, whiteboard) => ({
   id,
   content: typeof whiteboard?.content === 'string' ? whiteboard.content : '',
   version: Number(whiteboard?.version) || 1,
   updatedAt: whiteboard?.updatedAt || null,
+  archives: Array.isArray(whiteboard?.archives) ? whiteboard.archives.slice(-100) : [],
 });
 
 const legacyWhiteboard = (whiteboard) => ({
@@ -145,4 +154,5 @@ export {
   nextId,
   normalizeTags,
   whiteboardIds,
+  whiteboardNames,
 };

@@ -11,6 +11,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { config } from './config/index.js';
 import { cmsUploads } from './modules/cms/cmsUploads.js';
+import { getCmsPool } from './modules/cms/cmsPostgresDb.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,8 +51,13 @@ app.use('/api', apiRoutes);
 
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/api/health', async (req, res) => {
+  try {
+    if (config.cms.store === 'postgres') await getCmsPool().query('SELECT 1');
+    res.status(200).json({ status: 'ok', cmsStore: config.cms.store, timestamp: new Date().toISOString() });
+  } catch {
+    res.status(503).json({ status: 'degraded', cmsStore: config.cms.store, timestamp: new Date().toISOString() });
+  }
 });
 
 // Error handling middleware (should be last)

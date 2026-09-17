@@ -1,0 +1,17 @@
+[Unit]
+Description=Veldr CMS PostgreSQL and attachment backup
+After=postgresql.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/veldr/backend
+EnvironmentFile=/opt/veldr/backend/.env
+ExecStart=/usr/bin/node scripts/cms-postgres-backup.js backup --backup-dir /opt/veldr/backups/cms-postgres
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+[Install]
+WantedBy=multi-user.target

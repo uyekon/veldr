@@ -5,6 +5,9 @@ dotenv.config();
 const env = (key, fallback) => process.env[key] ?? fallback;
 const nodeEnv = env('NODE_ENV', 'development');
 const jwtSecret = process.env.JWT_SECRET || (nodeEnv === 'production' ? null : 'veldr-dev-secret-change-me');
+const cmsStore = env('CMS_STORE', 'json');
+const cmsDatabaseUrl = env('CMS_DATABASE_URL', '');
+const cmsOwnerId = env('CMS_OWNER_ID', '00000000-0000-7000-8000-000000000001');
 const listEnv = (key, fallback) => env(key, fallback)
   .split(',')
   .map((value) => value.trim())
@@ -12,6 +15,11 @@ const listEnv = (key, fallback) => env(key, fallback)
 
 if (!jwtSecret) {
   throw new Error('JWT_SECRET must be set in production');
+}
+if (!['json', 'postgres'].includes(cmsStore)) throw new Error('CMS_STORE must be json or postgres');
+if (cmsStore === 'postgres' && !cmsDatabaseUrl) throw new Error('CMS_DATABASE_URL is required when CMS_STORE=postgres');
+if (cmsStore === 'postgres' && nodeEnv === 'production' && cmsOwnerId === '00000000-0000-7000-8000-000000000001') {
+  throw new Error('Generate and set a unique CMS_OWNER_ID before enabling PostgreSQL in production');
 }
 
 export const config = {
@@ -39,6 +47,11 @@ export const config = {
     cookieSecure: env('AUTH_COOKIE_SECURE', nodeEnv === 'production' ? 'true' : 'false') === 'true',
   },
   cms: {
+    store: cmsStore,
+    databaseUrl: cmsDatabaseUrl,
+    databaseSsl: env('CMS_DATABASE_SSL', 'false') === 'true',
+    databasePoolMax: Number(env('CMS_DATABASE_POOL_MAX', '10')),
+    ownerId: cmsOwnerId,
     dataDir: env('CMS_DATA_DIR', 'public/data/cms'),
     dbFile: env('CMS_DB_FILE', 'db.json'),
     uploadDir: env('CMS_UPLOAD_DIR', 'public/uploads/cms'),

@@ -13,6 +13,7 @@ import { noteMarkdown, exportAllNotes } from './cmsExport.js';
 import { requireEditor, requireViewer } from './cmsAuth.js';
 import { cleanupUnreferencedCmsUploads, extractCmsUploadFilenames } from './cmsImages.js';
 import { cleanupCmsUploads } from './cmsMaintenance.js';
+import { deleteCmsAttachments, recordCmsAttachment } from './cmsAttachments.js';
 
 const router = express.Router();
 const execFileAsync = promisify(execFile);
@@ -422,7 +423,8 @@ router.put('/notes/:id', editor, asyncHandler(async (req, res) => {
   db.notes[index] = updated;
   bindNotebookToCategoryAncestors(db, updated.category, updated.notebookId);
   await persistDB();
-  await cleanupUnreferencedCmsUploads({ notes: referenceDocuments(db), candidates: previousImages });
+  const removedImages = await cleanupUnreferencedCmsUploads({ notes: referenceDocuments(db), candidates: previousImages });
+  await deleteCmsAttachments(removedImages.map((filename) => `/uploads/cms/${filename}`));
   return send(res, 200, updated);
 }));
 
@@ -435,7 +437,8 @@ router.delete('/notes/:id', editor, asyncHandler(async (req, res) => {
   db.notes = db.notes.filter(note => note.id !== id);
   if (db.notes.length === before) return send(res, 404, { error: 'Note not found' });
   await persistDB();
-  await cleanupUnreferencedCmsUploads({ notes: referenceDocuments(db), candidates: previousImages });
+  const removedImages = await cleanupUnreferencedCmsUploads({ notes: referenceDocuments(db), candidates: previousImages });
+  await deleteCmsAttachments(removedImages.map((filename) => `/uploads/cms/${filename}`));
   return send(res, 200, { ok: true });
 }));
 
@@ -592,13 +595,20 @@ router.post('/media', editor, (req, res) => {
       return send(res, 400, { code: 'FILE_TOO_LARGE', error: '视频超过 500 MB，无法上传' });
     }
     if (error || !req.file) return send(res, 400, { error: error?.message || 'Select an MP4, WebM, or Ogg video' });
+    let posterPath;
+    let attachmentPaths = [];
     try {
       const meta = await probeVideo(req.file.path);
       const id = `media_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const posterName = `${id}.jpg`;
       fs.mkdirSync(videoPosterDir, { recursive: true });
-      await execFileAsync('ffmpeg', ['-y', '-ss', '0', '-i', req.file.path, '-frames:v', '1', '-vf', 'scale=640:-2', path.join(videoPosterDir, posterName)], { maxBuffer: 1024 * 1024 });
+      posterPath = path.join(videoPosterDir, posterName);
+      await execFileAsync('ffmpeg', ['-y', '-ss', '0', '-i', req.file.path, '-frames:v', '1', '-vf', 'scale=640:-2', posterPath], { maxBuffer: 1024 * 1024 });
       const item = { id, originalName: decodeUploadName(req.file.originalname), mime: req.file.mimetype, size: req.file.size, duration: meta.duration, width: meta.width, height: meta.height, url: `/uploads/cms/videos/${req.file.filename}`, posterUrl: `/uploads/cms/video-posters/${posterName}`, createdAt: nowIso() };
+      await recordCmsAttachment({ file: req.file.path, path: item.url, originalName: item.originalName, mime: item.mime, size: item.size });
+      attachmentPaths.push(item.url);
+      await recordCmsAttachment({ file: posterPath, path: item.posterUrl, originalName: posterName, mime: 'image/jpeg', size: (await fsp.stat(posterPath)).size });
+      attachmentPaths.push(item.posterUrl);
       await withTransaction(async () => {
         const db = await loadDB();
         db.media.unshift(item);
@@ -607,6 +617,8 @@ router.post('/media', editor, (req, res) => {
       return send(res, 201, item);
     } catch (probeError) {
       await fsp.unlink(req.file.path).catch(() => {});
+      if (posterPath) await fsp.unlink(posterPath).catch(() => {});
+      await deleteCmsAttachments(attachmentPaths).catch(() => {});
       return send(res, 400, { error: probeError.message || 'Video validation failed' });
     }
   });
@@ -623,16 +635,26 @@ router.delete('/media/:id', editor, asyncHandler(async (req, res) => {
   await persistDB();
   await fsp.unlink(path.join(videoUploadDir, filename)).catch(() => {});
   if (item.posterUrl) await fsp.unlink(path.join(videoPosterDir, path.basename(item.posterUrl))).catch(() => {});
+  await deleteCmsAttachments([item.url, item.posterUrl].filter(Boolean));
   return send(res, 200, { ok: true });
 }));
 
 router.post('/upload', editor, (req, res) => {
-  upload.single('image')(req, res, (error) => {
+  upload.single('image')(req, res, async (error) => {
     if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
       return send(res, 400, { code: 'FILE_TOO_LARGE', error: '图片超过 20 MB，无法上传' });
     }
     if (error) return send(res, 400, { error: error.message || 'Upload failed' });
     if (!req.file) return send(res, 400, { error: 'No file selected' });
+    try {
+      await recordCmsAttachment({
+        file: req.file.path, path: `/uploads/cms/${req.file.filename}`,
+        originalName: decodeUploadName(req.file.originalname), mime: req.file.mimetype, size: req.file.size,
+      });
+    } catch (attachmentError) {
+      await fsp.unlink(req.file.path).catch(() => {});
+      return send(res, 500, { error: 'Unable to record uploaded image' });
+    }
     return send(res, 201, {
       url: `/uploads/cms/${req.file.filename}`,
       name: req.file.originalname,
@@ -641,7 +663,9 @@ router.post('/upload', editor, (req, res) => {
 });
 
 router.post('/uploads/cleanup', editor, asyncHandler(async (req, res) => {
-  return send(res, 200, await cleanupCmsUploads());
+  const result = await cleanupCmsUploads();
+  await deleteCmsAttachments(result.removed.map((filename) => `/uploads/cms/${filename}`));
+  return send(res, 200, result);
 }));
 
 export default router;

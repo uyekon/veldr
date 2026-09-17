@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { config } from '../../config/index.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { withCmsLock } from './cmsLock.js';
+import { loadPostgresDB, persistPostgresDB, withPostgresTransaction } from './cmsPostgresStore.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,6 +33,7 @@ let loadingPromise = null;
 
 // All runtime writers must enter this queue; readers see committed snapshots only.
 const withTransaction = (operation) => {
+  if (config.cms.store === 'postgres') return withPostgresTransaction(operation);
   if (transaction.getStore()) return operation();
   const pending = operationChain.catch(() => {}).then(() => withCmsLock(dataDir, async () => {
     const draft = structuredClone(await loadDB());
@@ -150,6 +152,7 @@ const readDB = async () => {
 };
 
 const loadDB = async () => {
+  if (config.cms.store === 'postgres') return loadPostgresDB();
   if (transaction.getStore()) return transaction.getStore().draft;
   if (loadingPromise) return structuredClone(await loadingPromise);
   if (db) return structuredClone(db);
@@ -158,6 +161,7 @@ const loadDB = async () => {
 };
 
 const persistDB = async () => {
+  if (config.cms.store === 'postgres') return persistPostgresDB();
   await ensureRuntimeDirs();
   const tmp = `${dbFile}.tmp`;
   const snapshot = structuredClone(transaction.getStore()?.draft || db || defaultDB());

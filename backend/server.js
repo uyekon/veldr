@@ -1,6 +1,8 @@
 import { app, PORT } from './app.js';
 import { testConnections, syncDatabases, closeConnections } from './config/databases.js';
 import { initPasswordOnly } from './scripts/initPassword.js';
+import { config } from './config/index.js';
+import { closeCmsPool, runCmsMigrations } from './modules/cms/cmsPostgresDb.js';
 
 let server = null;
 const HOST = process.env.HOST || (process.env.NODE_ENV === 'production' ? '127.0.0.1' : '0.0.0.0');
@@ -21,6 +23,11 @@ const startServer = async () => {
     // Initialize password table (只初始化，不重复连接数据库)
     await initPasswordOnly();
 
+    if (config.cms.store === 'postgres') {
+      await runCmsMigrations();
+      console.log('✅ CMS PostgreSQL migrations complete');
+    }
+
     server = app.listen(PORT, HOST, () => {
       console.log(`Server is running on port ${PORT}`);
       console.log(`API URL: http://${HOST}:${PORT}/api`);
@@ -36,6 +43,7 @@ const shutdown = (signal) => {
   if (!server) process.exit(0);
   server.close(async () => {
     await closeConnections();
+    await closeCmsPool();
     console.log('Process terminated');
     process.exit(0);
   });

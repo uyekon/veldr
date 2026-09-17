@@ -11,7 +11,7 @@ const authCookieOptions = {
 };
 
 const signAuthToken = (sessionVersion = 1) => jwt.sign(
-  { sub: 'admin', sv: Number(sessionVersion) || 1 },
+  { sub: config.cms.ownerId, sv: Number(sessionVersion) || 1 },
   config.auth.jwtSecret,
   { expiresIn: config.auth.jwtExpiresIn }
 );
@@ -47,10 +47,11 @@ const authenticateRequest = async (req) => {
 
   try {
     const payload = jwt.verify(token, config.auth.jwtSecret);
-    if (payload?.sub !== 'admin') return null;
+    // Accept pre-migration cookies for one compatibility window.
+    if (![config.cms.ownerId, 'admin'].includes(payload?.sub)) return null;
     const credentials = await Password.findOne({ where: { type: 'default' } });
     if (!credentials || Number(payload.sv) !== Number(credentials.sessionVersion || 1)) return null;
-    return payload;
+    return { ...payload, sub: config.cms.ownerId };
   } catch {
     return null;
   }

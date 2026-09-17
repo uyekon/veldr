@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import Password from '../models/Password.js';
 import { config } from '../config/index.js';
 import { clearAuthCookie, setAuthCookie } from '../middleware/auth.js';
+import { syncCmsOwnerCredential } from '../modules/cms/cmsAccount.js';
 
 const DEFAULT_PASSWORD = process.env.DEFAULT_PASSWORD || '123456';
 const BCRYPT_ROUNDS = 12;
@@ -36,6 +37,9 @@ const updatePasswordInDB = async (newPassword) => {
     isDefault: newPassword === DEFAULT_PASSWORD,
     lastModified: new Date(),
     sessionVersion: Number(current.sessionVersion || 1) + 1,
+  });
+  await syncCmsOwnerCredential(passwordRecord).catch((error) => {
+    console.error('Unable to mirror administrator credential into CMS PostgreSQL:', error.message);
   });
   passwordChangeListeners.forEach((listener) => listener());
   return passwordRecord;

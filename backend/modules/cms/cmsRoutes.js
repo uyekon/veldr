@@ -7,7 +7,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { attachAuthState } from '../../middleware/auth.js';
 import { asyncHandler as handleAsync } from '../../middleware/errorHandler.js';
-import { loadDB, persistDB, withTransaction, nextId, normalizeTags, uploadDir, whiteboardIds, whiteboardNames } from './cmsStore.js';
+import { loadDB, persistDB, withTransaction, nextId, normalizeTags, uploadDir, whiteboardIds, whiteboardNames, canonicalWhiteboardId } from './cmsStore.js';
 import { createHash } from 'node:crypto';
 import { noteMarkdown, exportAllNotes } from './cmsExport.js';
 import { requireEditor, requireViewer } from './cmsAuth.js';
@@ -221,14 +221,16 @@ router.get('/whiteboards', editor, asyncHandler(async (_req, res) => {
 }));
 
 router.get('/whiteboards/:id', editor, asyncHandler(async (req, res) => {
-  if (!whiteboardIds.includes(req.params.id)) return send(res, 404, { error: 'Whiteboard not found' });
-  const whiteboard = findWhiteboard(await loadDB(), req.params.id);
+  const id = canonicalWhiteboardId(req.params.id);
+  if (!whiteboardIds.includes(id)) return send(res, 404, { error: 'Whiteboard not found' });
+  const whiteboard = findWhiteboard(await loadDB(), id);
   return send(res, 200, publicWhiteboard(whiteboard));
 }));
 
 router.put('/whiteboards/:id', editor, asyncHandler(async (req, res) => {
-  if (!whiteboardIds.includes(req.params.id)) return send(res, 404, { error: 'Whiteboard not found' });
-  return updateWhiteboard(req, res, req.params.id);
+  const id = canonicalWhiteboardId(req.params.id);
+  if (!whiteboardIds.includes(id)) return send(res, 404, { error: 'Whiteboard not found' });
+  return updateWhiteboard(req, res, id);
 }));
 
 router.post('/whiteboards/n/archive', editor, asyncHandler(async (req, res) => {

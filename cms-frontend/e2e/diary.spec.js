@@ -3,7 +3,10 @@ import { test, expect } from '@playwright/test';
 test('save, convert modal, notebook scope and archived visibility', async ({ page }, testInfo) => {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   let board = { id: 'n', content: '日记正文', version: 1, updatedAt: null };
-  const notes = [{ id: 1, title: '已归档记录', content: 'old', tags: ['archived'], category: 'a', notebookId: 'nb1' }];
+  const notes = [
+    { id: 1, title: '已归档记录', content: 'old', tags: ['archived', '强身健体'], category: 'a', notebookId: 'nb1' },
+    { id: 2, title: '健康记录', content: 'health', tags: ['强身健体'], category: 'a', notebookId: 'nb1' },
+  ];
   const categories = [{ id: 'a', label: '工作', notebookId: ['nb1'] }, { id: 'b', label: '生活', notebookId: ['nb2'] }];
   const menus = [{ id: 'docs', label: 'Docs', type: 'docs' }, { id: 'nb1', label: '工作本', type: 'notebook' }, { id: 'nb2', label: '生活本', type: 'notebook' }];
   await page.route('**/api/**', async route => {
@@ -20,9 +23,10 @@ test('save, convert modal, notebook scope and archived visibility', async ({ pag
     } else if (endpoint.endsWith('/whiteboards/n/archive')) {
       const payload = request.postDataJSON();
       expect(payload.version).toBe(board.version); expect(payload.requestId).toBeTruthy();
-      notes.push({ id: 2, ...payload, content: board.content });
+      const note = { id: 3, ...payload, content: board.content };
+      notes.push(note);
       board = { ...board, content: '', version: board.version + 1 };
-      body = { note: notes[1], whiteboard: board };
+      body = { note, whiteboard: board };
     }
     await route.fulfill({ json: body });
   });
@@ -30,7 +34,7 @@ test('save, convert modal, notebook scope and archived visibility', async ({ pag
   await expect(page.locator('#whiteboardContent')).toHaveValue('日记正文');
   await expect(page.locator('#whiteboardTitle')).toHaveText('n');
   const switcher = page.locator(testInfo.project.name === 'mobile' ? '#whiteboardMobileSwitcher' : '#tocNav');
-  await expect(switcher.locator('.whiteboard-switcher__button > span')).toHaveText(['t', 'b', 'w', 'dailyPush', 'n']);
+  await expect(switcher.locator('.whiteboard-switcher__button > span')).toHaveText(['t', 'b', 'w', 'dp', 'n']);
   await expect(page.locator('#diaryArticleTitle')).not.toBeVisible();
   await page.locator('#whiteboardContent').fill('新内容');
   await page.locator('#whiteboardSaveBtn').click();
@@ -48,7 +52,14 @@ test('save, convert modal, notebook scope and archived visibility', async ({ pag
   await expect(page.locator('#diaryArchiveModal')).not.toBeVisible();
   await expect(page.locator('#whiteboardContent')).toHaveValue('');
   await page.evaluate(() => window.App.navTo('docs'));
-  await expect(page.locator('.note-card__title')).toHaveText(['测试文章']);
+  await expect(page.locator('.note-card__title')).toHaveText(['健康记录', '测试文章']);
+  await expect(page.locator('#tagsList [data-filter="tag:强身健体"] .sidebar__count')).toHaveText('1');
+  await page.evaluate(() => window.App.navTo('nb2'));
+  await expect(page.locator('#tagsList [data-filter="tag:强身健体"]')).toHaveCount(0);
+  await page.evaluate(() => window.App.navTo('nb1'));
+  await expect(page.locator('#tagsList [data-filter="tag:强身健体"] .sidebar__count')).toHaveText('1');
+  await page.evaluate(() => window.App.setFilter('tag:强身健体'));
+  await expect(page.locator('.note-card__title')).toHaveText(['健康记录']);
   await page.evaluate(() => window.App.setFilter('tag:archived'));
   await expect(page.locator('.note-card__title')).toHaveText(['已归档记录']);
   expect(errors).toEqual([]);

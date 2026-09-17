@@ -23,6 +23,11 @@ export const notesViewMethods = {
     return (note?.tags || []).some((tag) => String(tag).trim().toLowerCase() === 'archived');
   },
 
+  noteHasTag(note, wantedTag) {
+    const wanted = String(wantedTag).trim();
+    return (note?.tags || []).some(tag => String(tag).trim() === wanted);
+  },
+
   getAllScopedNotes() {
     const notebookId = this.getCurrentNotebookId();
     if (!notebookId) return [...this._notes];
@@ -32,6 +37,29 @@ export const notesViewMethods = {
   getScopedNotes() {
     const notes = this.getAllScopedNotes();
     return this.currentFilter === 'tag:archived' ? notes.filter(note => this.isArchivedNote(note)) : notes.filter(note => !this.isArchivedNote(note));
+  },
+
+  getScopedTagCounts() {
+    const counts = new Map();
+    for (const note of this.getAllScopedNotes()) {
+      const archived = this.isArchivedNote(note);
+      const seen = new Set();
+      for (const rawTag of note.tags || []) {
+        const tag = String(rawTag).trim();
+        if (!tag) continue;
+        const isArchiveTag = tag.toLowerCase() === 'archived';
+        // Archived notes are intentionally invisible from every ordinary tag.
+        // Their only entry point is the dedicated archived tag filter.
+        if (archived !== isArchiveTag) continue;
+        const displayTag = isArchiveTag ? 'archived' : tag;
+        if (seen.has(displayTag)) continue;
+        seen.add(displayTag);
+        counts.set(displayTag, (counts.get(displayTag) || 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((left, right) => left.tag.localeCompare(right.tag, 'zh-CN'));
   },
 
   getFilteredNotes() {
@@ -54,7 +82,7 @@ export const notesViewMethods = {
     }
     else if (this.currentFilter.startsWith('tag:')) {
       const tag = this.currentFilter.slice(4);
-      notes = notes.filter(n => tag === 'archived' ? this.isArchivedNote(n) : Array.isArray(n.tags) && n.tags.includes(tag));
+      notes = notes.filter(n => tag === 'archived' ? this.isArchivedNote(n) : this.noteHasTag(n, tag));
     }
     else if (this.currentFilter === 'notag') {
       notes = notes.filter(n => !Array.isArray(n.tags) || n.tags.length === 0);
@@ -78,6 +106,7 @@ export const notesViewMethods = {
     this.renderCategories();
     this.renderMobileFilters();
     this.renderMobileNotebooks();
+    this.renderTags();
   },
 
   setSidebarActive(filter, el) {

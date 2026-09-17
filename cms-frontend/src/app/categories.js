@@ -351,36 +351,32 @@ export const categoryMethods = {
   renderMobileTags() {
     const container = document.getElementById('mobileTagsList');
     if (!container) return;
-    const allTags = new Set();
-    this._notes.forEach(n => (n.tags || []).forEach(t => allTags.add(t)));
-    if (allTags.size === 0) {
+    const tags = this.getScopedTagCounts ? this.getScopedTagCounts() : [];
+    if (tags.length === 0) {
       container.innerHTML = '<span style="font-size:.875rem;color:var(--c400)">暂无标签</span>';
       return;
     }
-    container.innerHTML = Array.from(allTags).sort().map(tag => {
+    container.innerHTML = tags.map(({ tag, count }) => {
       const filter = 'tag:' + tag;
       const active = this.currentFilter === filter;
-      const count = this._notes.filter(n => (n.tags || []).includes(tag)).length;
       return `<button class="mobile-sheet__tag ${active ? 'mobile-sheet__tag--active' : ''}" data-filter="${this.escapeHTML(filter)}" type="button" data-action="set-filter">#${this.escapeHTML(tag)} <span>${count}</span></button>`;
     }).join('');
   },
 
   renderTags() {
-    const notes = this._notes;
-    const allTags = new Set();
-    notes.forEach(n => (n.tags || []).forEach(t => allTags.add(t)));
+    const tags = this.getScopedTagCounts ? this.getScopedTagCounts() : [];
     const container = document.getElementById('tagsList');
     if (!container) return;
-    if (allTags.size === 0) {
+    if (tags.length === 0) {
       container.innerHTML = '<div style="padding:var(--s2) var(--s6);font-size:.8125rem;color:var(--c400)">暂无标签</div>';
       this.renderMobileTags();
       return;
     }
-    container.innerHTML = Array.from(allTags).sort().map(tag => `
-      <a class="sidebar__item" data-filter="${this.escapeHTML('tag:' + tag)}" data-action="set-filter">
+    container.innerHTML = tags.map(({ tag, count }) => `
+      <a class="sidebar__item ${this.currentFilter === `tag:${tag}` ? 'sidebar__item--active' : ''}" data-filter="${this.escapeHTML('tag:' + tag)}" data-action="set-filter">
         <svg class="sidebar__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
         ${this.escapeHTML(tag)}
-        <span class="sidebar__count">${notes.filter(n => (n.tags || []).includes(tag)).length}</span>
+        <span class="sidebar__count">${count}</span>
       </a>
     `).join('');
     this.renderMobileTags();

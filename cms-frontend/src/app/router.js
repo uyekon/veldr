@@ -33,8 +33,8 @@ export const routerMethods = {
     this._applyingRoute = true;
     try {
       let match;
-      if ((match = hash.match(/^#\/whiteboard(?:\/(t|b|w|dailyPush|n))?$/))) {
-        const id = match[1] || 't';
+      if ((match = hash.match(/^#\/whiteboard(?:\/(t|b|w|dp|dailyPush|n))?$/))) {
+        const id = match[1] === 'dailyPush' ? 'dp' : match[1] || 't';
         if (this.currentNav === 'whiteboard' && this.activeWhiteboardId !== id) {
           void this.selectWhiteboard(id);
           return;

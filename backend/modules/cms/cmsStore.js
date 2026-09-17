@@ -41,13 +41,14 @@ const withTransaction = (operation) => {
   return pending;
 };
 
-const whiteboardIds = ['t', 'b', 'w', 'dailyPush', 'n'];
+const whiteboardIds = ['t', 'b', 'w', 'dp', 'n'];
+const canonicalWhiteboardId = (id) => id === 'dailyPush' ? 'dp' : id;
 
 const whiteboardNames = {
   t: '白板',
   b: '白板 B',
   w: '白板 W',
-  dailyPush: '每日推送',
+  dp: '每日推送',
   n: '日记',
 };
 
@@ -85,7 +86,7 @@ const defaultDB = () => ({
 const normalizeWhiteboards = (database) => {
   const storedWhiteboards = Array.isArray(database.whiteboards) ? database.whiteboards : [];
   database.whiteboards = whiteboardIds.map((id) => {
-    const stored = storedWhiteboards.find((whiteboard) => whiteboard?.id === id);
+    const stored = storedWhiteboards.find((whiteboard) => canonicalWhiteboardId(whiteboard?.id) === id);
     return normalizeWhiteboard(id, stored || (id === 't' ? database.whiteboard : null));
   });
   database.whiteboard = legacyWhiteboard(database.whiteboards[0]);
@@ -111,6 +112,11 @@ const readDB = async () => {
       ['notes', 'categories', 'menus', 'whiteboards', 'media'].some(key => parsed[key] !== undefined &&
         (!Array.isArray(parsed[key]) || parsed[key].some(item => !item || typeof item !== 'object' || Array.isArray(item))))) {
       throw new Error('Invalid CMS database; restore a verified backup');
+    }
+    // Never silently discard either record if an imported database contains
+    // both IDs. Normal migration has exactly one legacy record.
+    if (parsed.whiteboards?.some(board => board.id === 'dp') && parsed.whiteboards.some(board => board.id === 'dailyPush')) {
+      throw new Error('Both dp and dailyPush exist; reconcile these whiteboards before loading');
     }
     db = parsed;
   } catch (error) {
@@ -199,5 +205,6 @@ export {
   nextId,
   normalizeTags,
   whiteboardIds,
+  canonicalWhiteboardId,
   whiteboardNames,
 };

@@ -115,28 +115,51 @@ describe('NoteFlow administrator access', () => {
     await agent.put('/api/cms/categories/project').send({ label: 'Project', parentId: child.body.id }).expect(400);
   });
 
-  it('keeps t, b, w, and dailyPush whiteboards independent and protects them from stale writes', async () => {
+  it('keeps t, b, w, and dp whiteboards independent and protects them from stale writes', async () => {
     await request(app).get('/api/cms/whiteboards').expect(401);
     await request(app).put('/api/cms/whiteboards/t').send({ content: 'blocked' }).expect(401);
 
     const agent = await editor();
     await agent.get('/api/cms/whiteboards').expect(200)
-      .expect(({ body }) => expect(body.map((whiteboard) => whiteboard.id)).toEqual(['t', 'b', 'w', 'dailyPush', 'n']));
+      .expect(({ body }) => expect(body.map((whiteboard) => whiteboard.id)).toEqual(['t', 'b', 'w', 'dp', 'n']));
     const t = await agent.put('/api/cms/whiteboards/t').send({ content: '买牛奶', version: 1 }).expect(200);
     const b = await agent.put('/api/cms/whiteboards/b').send({ content: '读书', version: 1 }).expect(200);
-    const d = await agent.put('/api/cms/whiteboards/dailyPush').send({ content: '推送', version: 1 }).expect(200);
+    const d = await agent.put('/api/cms/whiteboards/dp').send({ content: '推送', version: 1 }).expect(200);
     expect(t.body).toMatchObject({ id: 't', content: '买牛奶', version: 2 });
     expect(b.body).toMatchObject({ id: 'b', content: '读书', version: 2 });
-    expect(d.body).toMatchObject({ id: 'dailyPush', content: '推送', version: 2 });
+    expect(d.body).toMatchObject({ id: 'dp', content: '推送', version: 2 });
     await agent.put('/api/cms/whiteboards/t').send({ content: 'stale', version: 1 }).expect(409);
     await agent.get('/api/cms/whiteboards/b').expect(200)
       .expect(({ body }) => expect(body).toMatchObject({ id: 'b', content: '读书', version: 2 }));
-    await agent.get('/api/cms/whiteboards/dailyPush').expect(200)
-      .expect(({ body }) => expect(body).toMatchObject({ id: 'dailyPush', content: '推送', version: 2 }));
+    await agent.get('/api/cms/whiteboards/dp').expect(200)
+      .expect(({ body }) => expect(body).toMatchObject({ id: 'dp', content: '推送', version: 2 }));
     await agent.get('/api/cms/whiteboards/x').expect(404);
 
     await agent.get('/api/cms/whiteboard').expect(200)
       .expect(({ body }) => expect(body).toMatchObject({ content: '买牛奶', version: 2 }));
+  });
+
+  it('migrates dailyPush data to dp and keeps legacy API writes version-protected', async () => {
+    const agent = await editor();
+    const file = path.join(tempDir, 'cms-data', 'db.json');
+    const archives = [{ id: 'saved', title: '历史快照', content: '旧正文', version: 6, createdAt: '2026-09-01T00:00:00.000Z' }];
+    const board = { id: 'dailyPush', content: '保留推送内容', version: 7, updatedAt: '2026-09-02T00:00:00.000Z', archives };
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(file, JSON.stringify({ notes: [], menus: [], categories: [], media: [], whiteboards: [board] }));
+    resetDBForTests();
+    for (const id of ['dp', 'dailyPush']) {
+      await agent.get(`/api/cms/whiteboards/${id}`).expect(200)
+        .expect(({ body }) => expect(body).toMatchObject({ id: 'dp', content: board.content, version: 7, updatedAt: board.updatedAt }));
+    }
+    await agent.put('/api/cms/whiteboards/dailyPush').send({ content: 'stale', version: 6 }).expect(409);
+    await agent.put('/api/cms/whiteboards/dailyPush').send({ content: '新内容', version: 7 }).expect(200)
+      .expect(({ body }) => expect(body).toMatchObject({ id: 'dp', version: 8 }));
+    const stored = JSON.parse(await fs.readFile(file, 'utf8'));
+    expect(stored.whiteboards.map(item => item.id)).toEqual(['t', 'b', 'w', 'dp', 'n']);
+    expect(stored.whiteboards.find(item => item.id === 'dp').archives).toEqual(archives);
+    resetDBForTests();
+    await agent.get('/api/cms/whiteboards/dp').expect(200)
+      .expect(({ body }) => expect(body).toMatchObject({ content: '新内容', version: 8 }));
   });
 
   it('archives the diary as an article and clears the whiteboard', async () => {
@@ -214,7 +237,8 @@ describe('NoteFlow administrator access', () => {
   it('does not replace a corrupt database with empty data', async () => {
     const agent = await editor();
     const file = path.join(tempDir, 'cms-data', 'db.json');
-    for (const content of ['{corrupted', JSON.stringify({ notes: [null] }), JSON.stringify({ categories: 'invalid' })]) {
+    for (const content of ['{corrupted', JSON.stringify({ notes: [null] }), JSON.stringify({ categories: 'invalid' }),
+      JSON.stringify({ whiteboards: [{ id: 'dailyPush', content: 'old' }, { id: 'dp', content: 'new' }] })]) {
       await fs.writeFile(file, content); resetDBForTests();
       await agent.get('/api/cms/notes').expect(500);
       await agent.get('/api/cms/notes').expect(500);

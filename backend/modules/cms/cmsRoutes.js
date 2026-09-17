@@ -588,6 +588,9 @@ router.get('/media', viewer, asyncHandler(async (req, res) => {
 
 router.post('/media', editor, (req, res) => {
   videoUpload.single('video')(req, res, async (error) => {
+    if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
+      return send(res, 400, { code: 'FILE_TOO_LARGE', error: '视频超过 500 MB，无法上传' });
+    }
     if (error || !req.file) return send(res, 400, { error: error?.message || 'Select an MP4, WebM, or Ogg video' });
     try {
       const meta = await probeVideo(req.file.path);

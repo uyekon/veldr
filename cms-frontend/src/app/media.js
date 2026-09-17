@@ -1,4 +1,5 @@
 import { apiPath } from '../config.js';
+import { videoFileError, videoUploadError } from './video-upload.js';
 
 export const mediaMethods = {
   async openMediaLibrary() {
@@ -17,10 +18,13 @@ export const mediaMethods = {
   },
   async uploadLibraryVideo(event) {
     const file = event.target.files?.[0]; if (!file) return;
+    const fileError = videoFileError(file);
+    if (fileError) { event.target.value = ''; this.toast(fileError); return; }
     const form = new FormData(); form.append('video', file);
     try {
       const res = await fetch(apiPath('/media'), { method: 'POST', credentials: 'include', headers: this.accessKey ? { 'X-Access-Key': this.accessKey } : {}, body: form });
-      const data = await res.json(); if (!res.ok) throw new Error(data.error || '上传失败');
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(videoUploadError(res, data));
       this.toast('视频上传成功'); this.openMediaLibrary();
     } catch (error) { this.toast(error.message); }
   },

@@ -5,7 +5,8 @@ This deployment layout uses one Node backend and two independent frontend sites.
 ## Domains
 
 ```text
-notes.lifetip.top -> /var/www/veldr/dist
+veldr.lifetip.top -> /var/www/veldr/dist
+notes.lifetip.top -> /var/www/veldr-cms/dist
 cms.lifetip.top   -> /var/www/veldr-cms/dist
 backend API       -> 127.0.0.1:5000
 ```

@@ -13,6 +13,7 @@ import {
   removeDraft,
   saveDraft,
 } from './drafts.js';
+import { videoFileError, videoUploadError } from './video-upload.js';
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_IMAGE_LABEL = '20 MB';
@@ -651,13 +652,16 @@ export const editorMethods = {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
+    const fileError = videoFileError(file);
+    if (fileError) { this.toast(fileError); return; }
     const formData = new FormData();
     formData.append('video', file);
     this.showLoading(true);
     try {
       const response = await fetch(apiPath('/media'), { method: 'POST', credentials: 'include', body: formData });
       const data = await response.json().catch(() => null);
-      if (!response.ok || !data?.url) throw new Error(data?.error || 'Video upload failed');
+      if (!response.ok) throw new Error(videoUploadError(response, data));
+      if (!data?.url) throw new Error('视频上传响应无效');
       if (this.currentEditorMode === 'source') {
         const source = document.getElementById('noteContent');
         const markup = `\n<video controls preload="metadata"${data.posterUrl ? ` poster="${data.posterUrl}"` : ''} src="${data.url}"></video>\n`;

@@ -28,6 +28,9 @@ test('save, convert modal, notebook scope and archived visibility', async ({ pag
   });
   await page.goto('/#/whiteboard/n');
   await expect(page.locator('#whiteboardContent')).toHaveValue('日记正文');
+  await expect(page.locator('#whiteboardTitle')).toHaveText('n');
+  const switcher = page.locator(testInfo.project.name === 'mobile' ? '#whiteboardMobileSwitcher' : '#tocNav');
+  await expect(switcher.locator('.whiteboard-switcher__button > span')).toHaveText(['t', 'b', 'w', 'dailyPush', 'n']);
   await expect(page.locator('#diaryArticleTitle')).not.toBeVisible();
   await page.locator('#whiteboardContent').fill('新内容');
   await page.locator('#whiteboardSaveBtn').click();

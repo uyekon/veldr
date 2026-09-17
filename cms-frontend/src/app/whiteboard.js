@@ -1,7 +1,6 @@
 import { apiPath } from '../config.js';
 
 const WHITEBOARD_IDS = ['t', 'b', 'w', 'dailyPush', 'n'];
-const WHITEBOARD_NAMES = { t: '白板', b: '白板 B', w: '白板 W', dailyPush: '每日推送', n: '日记' };
 
 const formatUpdatedAt = (value) => {
   if (!value) return '尚未保存';
@@ -35,7 +34,7 @@ export const whiteboardMethods = {
   whiteboardItems() {
     return WHITEBOARD_IDS.map((id) => (
       this.whiteboards.find((whiteboard) => whiteboard.id === id)
-      || { id, name: WHITEBOARD_NAMES[id] || id, updatedAt: this.getWhiteboardState(id)?.whiteboard.updatedAt || null }
+      || { id, updatedAt: this.getWhiteboardState(id)?.whiteboard.updatedAt || null }
     ));
   },
 
@@ -56,7 +55,7 @@ export const whiteboardMethods = {
     const buttons = this.whiteboardItems().map((whiteboard) => {
       const active = whiteboard.id === this.activeWhiteboardId;
       return `<button class="whiteboard-switcher__button ${active ? 'whiteboard-switcher__button--active' : ''}" type="button" data-action="select-whiteboard" data-id="${whiteboard.id}" aria-pressed="${active}">
-        <span>${this.escapeHTML(whiteboard.name || WHITEBOARD_NAMES[whiteboard.id] || whiteboard.id)}</span>
+        <span>${this.escapeHTML(whiteboard.id)}</span>
         <small>${whiteboard.updatedAt ? formatUpdatedAt(whiteboard.updatedAt).replace('上次保存 ', '') : '尚未保存'}</small>
       </button>`;
     }).join('');
@@ -78,7 +77,7 @@ export const whiteboardMethods = {
     const statusEl = document.getElementById('whiteboardStatus');
     const title = document.getElementById('whiteboardTitle');
     const diaryConvertBtn = document.getElementById('diaryConvertBtn');
-    if (title) title.textContent = WHITEBOARD_NAMES[this.activeWhiteboardId] || `白板 ${this.activeWhiteboardId}`;
+    if (title) title.textContent = this.activeWhiteboardId;
     if (diaryConvertBtn) diaryConvertBtn.style.display = this.activeWhiteboardId === 'n' && this.role === 'editor' ? '' : 'none';
     if (textarea) {
       textarea.readOnly = this.role !== 'editor' || state.converting || Boolean(state.conversionRequest);
@@ -101,7 +100,7 @@ export const whiteboardMethods = {
     this.whiteboardListLoadPromise = this.api('GET', apiPath('/whiteboards'))
       .then((whiteboards) => {
         this.whiteboards = WHITEBOARD_IDS.map((id) => (
-          whiteboards.find((whiteboard) => whiteboard.id === id) || { id, name: WHITEBOARD_NAMES[id] || id, updatedAt: null }
+          whiteboards.find((whiteboard) => whiteboard.id === id) || { id, updatedAt: null }
         ));
         this.renderWhiteboardSwitcher();
         return this.whiteboards;
@@ -141,7 +140,7 @@ export const whiteboardMethods = {
 
   updateWhiteboardMetadata(whiteboard) {
     const index = this.whiteboards.findIndex((item) => item.id === whiteboard.id);
-    const item = { id: whiteboard.id, name: WHITEBOARD_NAMES[whiteboard.id] || whiteboard.id, updatedAt: whiteboard.updatedAt };
+    const item = { id: whiteboard.id, updatedAt: whiteboard.updatedAt };
     if (index === -1) this.whiteboards.push(item);
     else this.whiteboards[index] = item;
     this.renderWhiteboardSwitcher();

@@ -10,9 +10,11 @@
     "dev": "vite --mode development --host 0.0.0.0",
     "build": "vite build --mode production",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "vitest run"
+    "test": "vitest run src",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "vite": "^8.1.5",
     "vitest": "^4.1.10"
   },

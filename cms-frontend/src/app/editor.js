@@ -61,6 +61,8 @@ export const editorMethods = {
     modal?.classList.toggle('modal--fullscreen');
   },
   async openNoteModal(editId) {
+    if (this.getWhiteboardState?.('n')?.converting || this.getWhiteboardState?.('n')?.conversionRequest) { this.toast('请先确认日记转换结果'); return; }
+    if (this.autosaveInFlight || this.manualSaveInFlight) { this.toast('正在保存，请稍候'); return; }
     if (this.role !== 'editor') {
       this.toast('查看模式下不能编辑，请先登录管理员账号');
       return;
@@ -236,6 +238,9 @@ export const editorMethods = {
 
   async saveNote(options = {}) {
     if (this.role !== 'editor') return;
+    if (this.manualSaveInFlight) return;
+    if (this.noteSavePromise) await this.noteSavePromise;
+    if (this.manualSaveInFlight) return;
     const title = document.getElementById('noteTitle').value.trim();
     if (!title) return alert('请输入笔记标题');
     if (!this.getEditorMarkdown().trim()) return alert('请输入笔记内容');
@@ -243,6 +248,8 @@ export const editorMethods = {
     const draftNoteId = this.editingNoteId;
     const payload = this.getNoteFormPayload();
     if (this.editingNoteId && this.editingNoteVersion) payload.version = this.editingNoteVersion;
+    clearTimeout(this.autosaveTimer);
+    this.manualSaveInFlight = true;
     this.showLoading(true);
     try {
       if (this.editingNoteId) {
@@ -258,18 +265,22 @@ export const editorMethods = {
         document.getElementById('modalDeleteBtn').style.display = '';
         this.setAutosaveStatus(`已保存 v${this.editingNoteVersion}`);
       }
-      this.autosaveDirty = false;
-      await this.clearEditorDraft(draftNoteId);
+      this.autosaveDirty = !hasSameNotePayload(payload, this.getNoteFormPayload());
+      if (!this.autosaveDirty) await this.clearEditorDraft(draftNoteId);
+      else this.scheduleAutosave();
       await this.reloadNotes();
       this.updateCounts();
       this.renderTags();
-      if (options.keepOpen) this.renderNotes();
+      if (options.keepOpen || this.autosaveDirty) this.renderNotes();
       else { this.closeModal({ force: true }); this.showBrowse(); }
-      this.toast('笔记已保存');
+      this.toast(this.autosaveDirty ? '已保存提交内容，新增修改等待保存' : '笔记已保存');
     } catch (error) {
-      if (error.code === 'VERSION_CONFLICT' || error.status === 409) return this.handleVersionConflict(error.current);
+      if (error.code === 'VERSION_CONFLICT' || error.status === 409) return await this.handleVersionConflict(error.current);
       this.toast(error.message);
-    } finally { this.showLoading(false); }
+    } finally {
+      this.manualSaveInFlight = false; this.showLoading(false);
+      if (this.autosaveDirty && !this.conflictPending) this.scheduleAutosave();
+    }
   },
 
   async deleteNote() {
@@ -326,12 +337,15 @@ export const editorMethods = {
     note.tags = tags;
     this.updateCounts(); this.renderTags(); this.renderNotes();
     try {
-      await this.api('PUT', apiPath(`/notes/${id}`), { tags });
+      const updated = await this.api('PUT', apiPath(`/notes/${id}`), { tags, version: note.version });
+      Object.assign(note, updated);
+      if (this.currentNote?.id === id) this.showDetail(id);
       this.toast(archived ? '文章已取消归档' : '文章已归档');
     } catch (error) {
       note.tags = previousTags;
       this.updateCounts(); this.renderTags(); this.renderNotes();
       this.toast(error.message || '归档操作失败');
+      if (this.currentNote?.id === id) this.showDetail(id);
     }
   },
 
@@ -342,6 +356,7 @@ export const editorMethods = {
   },
 
   confirmEditorExit() {
+    if (this.autosaveInFlight || this.manualSaveInFlight) { this.toast('正在保存，请稍候'); return false; }
     const modal = document.getElementById('noteModal');
     if (!modal?.classList.contains('modal-overlay--active') || !this.hasUnsavedEditorInput()) return true;
     if (confirm('有未保存的修改，确定要离开编辑吗？')) {
@@ -427,7 +442,14 @@ export const editorMethods = {
   },
 
   async autosaveNote() {
-    if (!this.editingNoteId || this.autosaveInFlight || !this.autosaveDirty) return;
+    if (this.noteSavePromise) return this.noteSavePromise;
+    if (this.manualSaveInFlight) return;
+    this.noteSavePromise = this.performAutosaveNote();
+    try { return await this.noteSavePromise; } finally { this.noteSavePromise = null; }
+  },
+
+  async performAutosaveNote() {
+    if (!this.editingNoteId || !this.autosaveDirty) return;
     this.autosaveInFlight = true; this.setAutosaveStatus('正在自动保存...');
     try {
       const payload = this.getNoteFormPayload();
@@ -441,7 +463,8 @@ export const editorMethods = {
       if (hasSameNotePayload(payload, this.getNoteFormPayload())) {
         this.autosaveDirty = false;
         await this.clearEditorDraft(updated.id);
-        this.setAutosaveStatus(`已自动保存 ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+        if (this.autosaveDirty) this.scheduleAutosave();
+        else this.setAutosaveStatus(`已自动保存 ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
       } else {
         // 请求发送后又输入了内容：保留脏状态并继续排队，不能把新输入误标记为已保存。
         this.autosaveDirty = true;
@@ -450,7 +473,7 @@ export const editorMethods = {
         this.autosaveTimer = setTimeout(() => this.autosaveNote(), 2500);
       }
     } catch (error) {
-      if (error.status === 409 || error.code === 'VERSION_CONFLICT') this.handleVersionConflict(error.current);
+      if (error.status === 409 || error.code === 'VERSION_CONFLICT') await this.handleVersionConflict(error.current);
       else this.setAutosaveStatus('自动保存失败');
     } finally { this.autosaveInFlight = false; }
   },
@@ -477,7 +500,8 @@ export const editorMethods = {
       if (local) Object.assign(local, remote);
       this.lastKnownNotesVersion = this.getNotesVersionFingerprint();
       await this.clearEditorDraft(remote.id);
-      this.setAutosaveStatus(`已同步服务器版本 v${this.editingNoteVersion}`);
+      if (this.autosaveDirty) this.scheduleAutosave();
+      else this.setAutosaveStatus(`已同步服务器版本 v${this.editingNoteVersion}`);
       return;
     }
 
@@ -492,8 +516,9 @@ export const editorMethods = {
       const payload = this.getNoteFormPayload(); payload.version = this.editingNoteVersion; payload.force = true;
       const updated = await this.api('PUT', apiPath(`/notes/${this.editingNoteId}`), payload);
       this.editingNoteVersion = Number(updated.version) || this.editingNoteVersion;
-      this.autosaveDirty = false; this.conflictPending = false;
-      await this.clearEditorDraft(updated.id);
+      this.autosaveDirty = !hasSameNotePayload(payload, this.getNoteFormPayload()); this.conflictPending = false;
+      if (!this.autosaveDirty) await this.clearEditorDraft(updated.id);
+      if (this.autosaveDirty) this.scheduleAutosave();
       await this.reloadNotes(); this.toast('已覆盖服务器版本');
     } catch (error) { this.toast(error.message); } finally { this.showLoading(false); }
   },

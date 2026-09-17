@@ -2,6 +2,8 @@ import fsp from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { config } from '../../config/index.js';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { withCmsLock } from './cmsLock.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,6 +26,20 @@ const repairFilenameEncoding = (name) => {
 
 let db = null;
 let writeChain = Promise.resolve();
+const transaction = new AsyncLocalStorage();
+let operationChain = Promise.resolve();
+let loadingPromise = null;
+
+// All runtime writers must enter this queue; readers see committed snapshots only.
+const withTransaction = (operation) => {
+  if (transaction.getStore()) return operation();
+  const pending = operationChain.catch(() => {}).then(() => withCmsLock(dataDir, async () => {
+    const draft = structuredClone(await loadDB());
+    return transaction.run({ draft }, operation);
+  }));
+  operationChain = pending.catch(() => {});
+  return pending;
+};
 
 const whiteboardIds = ['t', 'b', 'w', 'dailyPush', 'n'];
 
@@ -80,20 +96,32 @@ const ensureRuntimeDirs = async () => {
   await fsp.mkdir(uploadDir, { recursive: true });
 };
 
-const loadDB = async () => {
+const readDB = async () => {
+  if (transaction.getStore()) return transaction.getStore().draft;
   if (db) {
-    normalizeWhiteboards(db);
-    return db;
+    return structuredClone(db);
   }
 
   await ensureRuntimeDirs();
 
   try {
     const raw = await fsp.readFile(dbFile, 'utf8');
-    db = JSON.parse(raw);
-  } catch {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
+      ['notes', 'categories', 'menus', 'whiteboards', 'media'].some(key => parsed[key] !== undefined &&
+        (!Array.isArray(parsed[key]) || parsed[key].some(item => !item || typeof item !== 'object' || Array.isArray(item))))) {
+      throw new Error('Invalid CMS database; restore a verified backup');
+    }
+    db = parsed;
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
     db = defaultDB();
-    await persistDB();
+    try { await persistDB(); } catch (writeError) { db = null; throw writeError; }
+  }
+
+  if (!db || typeof db !== 'object' || Array.isArray(db)) {
+    db = null;
+    throw new Error('Invalid CMS database; restore a verified backup');
   }
 
   if (!Array.isArray(db.notes)) db.notes = [];
@@ -112,20 +140,33 @@ const loadDB = async () => {
   normalizeWhiteboards(db);
   if (!Array.isArray(db.media)) db.media = [];
   db.media = db.media.map(item => ({ ...item, originalName: repairFilenameEncoding(item.originalName) }));
-  return db;
+  return structuredClone(db);
+};
+
+const loadDB = async () => {
+  if (transaction.getStore()) return transaction.getStore().draft;
+  if (loadingPromise) return structuredClone(await loadingPromise);
+  if (db) return structuredClone(db);
+  if (!loadingPromise) loadingPromise = readDB().finally(() => { loadingPromise = null; });
+  return structuredClone(await loadingPromise);
 };
 
 const persistDB = async () => {
   await ensureRuntimeDirs();
   const tmp = `${dbFile}.tmp`;
-  const json = JSON.stringify(db || defaultDB(), null, 2);
+  const snapshot = structuredClone(transaction.getStore()?.draft || db || defaultDB());
+  const json = JSON.stringify(snapshot, null, 2);
 
   // .catch(() => {}) keeps one failed write from poisoning every later persist;
   // the failure still rejects this call's returned promise below
   const write = writeChain
     .catch(() => {})
-    .then(() => fsp.writeFile(tmp, json))
-    .then(() => fsp.rename(tmp, dbFile));
+    .then(async () => {
+      const file = await fsp.open(tmp, 'w', 0o600);
+      try { await file.writeFile(json); await file.sync(); } finally { await file.close(); }
+      await fsp.rename(tmp, dbFile);
+      db = snapshot;
+    });
 
   writeChain = write;
   return write;
@@ -133,7 +174,10 @@ const persistDB = async () => {
 
 const resetDBForTests = (nextDB = null) => {
   db = nextDB;
+  if (db) { normalizeWhiteboards(db); if (!Array.isArray(db.media)) db.media = []; }
   writeChain = Promise.resolve();
+  operationChain = Promise.resolve();
+  loadingPromise = null;
 };
 
 const nextId = (items) => items.reduce((max, item) => Math.max(max, Number(item.id) || 0), 0) + 1;
@@ -150,6 +194,7 @@ export {
   dbFile,
   loadDB,
   persistDB,
+  withTransaction,
   resetDBForTests,
   nextId,
   normalizeTags,

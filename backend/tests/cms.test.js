@@ -1,9 +1,10 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import bcrypt from 'bcryptjs';
+import { execFileSync } from 'node:child_process';
 
 let app;
 let databases;
@@ -148,10 +149,89 @@ describe('NoteFlow administrator access', () => {
     const diary = await agent.put('/api/cms/whiteboards/n').send({ content: '今天完成了一个重要目标', version: 1 }).expect(200);
     expect(diary.body).toMatchObject({ id: 'n', name: '日记', content: '今天完成了一个重要目标' });
     const archived = await agent.post('/api/cms/whiteboards/n/archive').send({
-      title: '周一记录', notebookId: 'notebook_work', category: 'work', tags: ['journal'],
+      title: '周一记录', notebookId: 'notebook_work', category: 'work', tags: ['journal'], version: diary.body.version, requestId: 'diary-conversion-test-1',
     }).expect(201);
     expect(archived.body.note).toMatchObject({ title: '周一记录', content: diary.body.content, notebookId: 'notebook_work', category: 'work', tags: ['journal'] });
     expect(archived.body.whiteboard).toMatchObject({ id: 'n', content: '', version: 3 });
+    const replay = await agent.post('/api/cms/whiteboards/n/archive').send({
+      title: '周一记录', notebookId: 'notebook_work', category: 'work', tags: ['journal'], version: diary.body.version, requestId: 'diary-conversion-test-1',
+    }).expect(200);
+    expect(replay.body.note.id).toBe(archived.body.note.id);
+    expect(replay.body.replayed).toBe(true);
+    await agent.post('/api/cms/whiteboards/n/archive').send({
+      title: 'Changed', notebookId: 'notebook_work', category: 'work', version: diary.body.version, requestId: 'diary-conversion-test-1',
+    }).expect(409);
+  });
+
+  it('rejects stale conversions and rolls back memory when persistence fails', async () => {
+    resetDBForTests({ notes: [], menus: [{ id: 'nb', type: 'notebook', label: 'NB' }], categories: [{ id: 'work', label: 'Work' }] });
+    const agent = await editor();
+    await agent.put('/api/cms/whiteboards/n').send({ content: 'do not lose me', version: 1 }).expect(200);
+    const payload = { title: 'Diary', notebookId: 'nb', category: 'work', version: 1, requestId: 'conversion-failure-test' };
+    await agent.post('/api/cms/whiteboards/n/archive').send(payload).expect(409);
+    await agent.post('/api/cms/whiteboards/n/archive').send({ title: 'old client' }).expect(400);
+    const rename = vi.spyOn(fs, 'rename').mockRejectedValueOnce(new Error('simulated disk failure'));
+    try { await agent.post('/api/cms/whiteboards/n/archive').send({ ...payload, version: 2 }).expect(500); }
+    finally { rename.mockRestore(); }
+    await agent.get('/api/cms/whiteboards/n').expect(200).expect(({ body }) => expect(body.content).toBe('do not lose me'));
+    await agent.get('/api/cms/notes').expect(200).expect(({ body }) => expect(body).toHaveLength(0));
+    await agent.post('/api/cms/whiteboards/n/archive').send({ ...payload, version: 2 }).expect(201);
+    resetDBForTests(); // Reload the persisted idempotency record as after a process restart.
+    await agent.post('/api/cms/whiteboards/n/archive').send({ ...payload, version: 2 }).expect(200);
+    await agent.get('/api/cms/notes').expect(200).expect(({ body }) => expect(body).toHaveLength(1));
+  });
+
+  it('serializes concurrent stale writes instead of losing a change', async () => {
+    const agent = await editor();
+    const results = await Promise.all(['one', 'two'].map(content => agent.put('/api/cms/whiteboards/n').send({ content, version: 1 })));
+    expect(results.map(result => result.status).sort()).toEqual([200, 409]);
+  });
+
+  it('exports private and archived notes only to editors', async () => {
+    await request(app).get('/api/cms/export').expect(401);
+    await request(app).get('/api/cms/notes/1/export').expect(401);
+    const agent = await editor();
+    await fs.mkdir(cmsUploadDir, { recursive: true });
+    await fs.writeFile(path.join(cmsUploadDir, 'export.png'), 'image-fixture');
+    await agent.put('/api/cms/notes/1').send({ tags: ['private', 'archived'], title: '中文 / 同名',
+      content: 'CMS content ![image](/uploads/cms/export.png) ![missing](/uploads/cms/missing.png) [external](https://example.com/a.png)' }).expect(200);
+    await agent.get('/api/cms/notes/1/export').expect(200).expect(({ text }) => {
+      expect(text).toContain('private'); expect(text).toContain('CMS content');
+    });
+    const result = await agent.get('/api/cms/export').buffer(true).parse((res, callback) => {
+      const chunks = []; res.on('data', chunk => chunks.push(chunk)); res.on('end', () => callback(null, Buffer.concat(chunks)));
+    }).expect(200);
+    expect(result.body.subarray(0, 2).toString()).toBe('PK');
+    const zip = path.join(tempDir, 'export.zip');
+    await fs.writeFile(zip, result.body);
+    const manifest = JSON.parse(execFileSync('unzip', ['-p', zip, 'manifest.json'], { encoding: 'utf8' }));
+    expect(manifest.missingAttachments).toContain('missing.png');
+    expect(execFileSync('unzip', ['-p', zip, 'attachments/export.png'], { encoding: 'utf8' })).toBe('image-fixture');
+    const markdown = execFileSync('unzip', ['-p', zip, '*.md'], { encoding: 'utf8' });
+    expect(markdown).toContain('attachments/export.png'); expect(markdown).toContain('https://example.com/a.png');
+  });
+
+  it('does not replace a corrupt database with empty data', async () => {
+    const agent = await editor();
+    const file = path.join(tempDir, 'cms-data', 'db.json');
+    for (const content of ['{corrupted', JSON.stringify({ notes: [null] }), JSON.stringify({ categories: 'invalid' })]) {
+      await fs.writeFile(file, content); resetDBForTests();
+      await agent.get('/api/cms/notes').expect(500);
+      await agent.get('/api/cms/notes').expect(500);
+      expect(await fs.readFile(file, 'utf8')).toBe(content);
+    }
+    // beforeEach seeds fresh memory for the next test.
+  });
+
+  it('keeps images still referenced by a whiteboard when deleting a note', async () => {
+    const agent = await editor();
+    await fs.mkdir(cmsUploadDir, { recursive: true });
+    await fs.writeFile(path.join(cmsUploadDir, 'whiteboard.png'), 'keep');
+    const content = '![image](/uploads/cms/whiteboard.png)';
+    await agent.put('/api/cms/notes/1').send({ content }).expect(200);
+    await agent.put('/api/cms/whiteboards/n').send({ content, version: 1 }).expect(200);
+    await agent.delete('/api/cms/notes/1').expect(200);
+    expect(await fs.readFile(path.join(cmsUploadDir, 'whiteboard.png'), 'utf8')).toBe('keep');
   });
 
   it('hides archived notes unless the archived tag is explicitly filtered', async () => {

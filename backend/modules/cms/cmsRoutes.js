@@ -6,8 +6,10 @@ import fsp from 'fs/promises';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { attachAuthState } from '../../middleware/auth.js';
-import { asyncHandler } from '../../middleware/errorHandler.js';
-import { loadDB, persistDB, nextId, normalizeTags, uploadDir, whiteboardIds, whiteboardNames } from './cmsStore.js';
+import { asyncHandler as handleAsync } from '../../middleware/errorHandler.js';
+import { loadDB, persistDB, withTransaction, nextId, normalizeTags, uploadDir, whiteboardIds, whiteboardNames } from './cmsStore.js';
+import { createHash } from 'node:crypto';
+import { noteMarkdown, exportAllNotes } from './cmsExport.js';
 import { requireEditor, requireViewer } from './cmsAuth.js';
 import { cleanupUnreferencedCmsUploads, extractCmsUploadFilenames } from './cmsImages.js';
 import { cleanupCmsUploads } from './cmsMaintenance.js';
@@ -16,11 +18,15 @@ const router = express.Router();
 const execFileAsync = promisify(execFile);
 
 const send = (res, status, data) => res.status(status).json(data);
+const asyncHandler = (handler) => handleAsync((req, res, next) => (
+  ['GET', 'HEAD'].includes(req.method) ? handler(req, res, next)
+    : withTransaction(() => handler(req, res, next))
+));
 
 // Async middleware/handlers must be wrapped so rejections reach errorHandler
 // instead of becoming unhandled rejections (which kill the process in server.js)
-const viewer = asyncHandler(requireViewer);
-const editor = asyncHandler(requireEditor);
+const viewer = handleAsync(requireViewer);
+const editor = handleAsync(requireEditor);
 
 const allowedImages = /^image\/(png|jpe?g|gif|webp|svg\+xml|avif|bmp)$/i;
 const allowedVideos = new Set(['video/mp4', 'video/webm', 'video/ogg']);
@@ -154,7 +160,9 @@ const probeVideo = async (filename) => {
   return { duration: Math.round(duration), width: Number(stream.width || 0), height: Number(stream.height || 0) };
 };
 
-const isVideoReferenced = (db, filename) => db.notes.some((note) => String(note.content || '').includes(`/uploads/cms/videos/${filename}`));
+const referenceDocuments = (db) => [...db.notes, ...db.whiteboards, ...db.menus,
+  ...db.whiteboards.flatMap(board => board.archives || [])];
+const isVideoReferenced = (db, filename) => referenceDocuments(db).some((note) => String(note.content || '').includes(`/uploads/cms/videos/${filename}`));
 
 router.use(attachAuthState);
 
@@ -192,6 +200,7 @@ const updateWhiteboard = async (req, res, id, legacyResponse = false) => {
   const current = findWhiteboard(db, id);
   const currentVersion = Number(current.version) || 1;
   if (!body.force && body.version !== undefined && Number(body.version) !== currentVersion) {
+    if (body.content === current.content) return send(res, 200, legacyResponse ? legacyWhiteboard(current) : publicWhiteboard(current));
     return send(res, 409, {
       error: 'Whiteboard was updated on another device',
       code: 'VERSION_CONFLICT',
@@ -199,7 +208,7 @@ const updateWhiteboard = async (req, res, id, legacyResponse = false) => {
     });
   }
 
-  const updated = { id, content: body.content, version: currentVersion + 1, updatedAt: nowIso() };
+  const updated = { ...current, id, content: body.content, version: currentVersion + 1, updatedAt: nowIso() };
   db.whiteboards[db.whiteboards.findIndex((whiteboard) => whiteboard.id === id)] = updated;
   if (id === 't') db.whiteboard = legacyWhiteboard(updated);
   await persistDB();
@@ -225,7 +234,22 @@ router.put('/whiteboards/:id', editor, asyncHandler(async (req, res) => {
 router.post('/whiteboards/n/archive', editor, asyncHandler(async (req, res) => {
   const db = await loadDB();
   const body = req.body || {};
+  if (!Number.isInteger(body.version) || body.version < 1 || !/^[a-zA-Z0-9_-]{16,100}$/.test(body.requestId || '')) {
+    return send(res, 400, { error: '请刷新页面后重试：缺少版本或请求标识' });
+  }
+  const fingerprint = createHash('sha256').update(JSON.stringify([
+    body.version, body.title, body.notebookId, body.category, normalizeTags(body.tags), body.desc || '', body.date || '',
+  ])).digest('hex');
+  db.diaryConversions ||= {};
+  if (Object.hasOwn(db.diaryConversions, body.requestId)) {
+    const saved = db.diaryConversions[body.requestId];
+    if (saved.fingerprint !== fingerprint) return send(res, 409, { error: '请求标识已用于其他转换', code: 'REQUEST_CONFLICT' });
+    return send(res, 200, { ...saved.result, replayed: true, whiteboard: publicWhiteboard(findWhiteboard(db, 'n')) });
+  }
   const whiteboard = findWhiteboard(db, 'n');
+  if (body.version !== whiteboard.version) return send(res, 409, {
+    error: '日记已更新，请重新加载并确认内容', code: 'VERSION_CONFLICT', current: publicWhiteboard(whiteboard),
+  });
   const title = String(body.title || '').trim();
   const content = String(whiteboard.content || '');
   const notebookId = String(body.notebookId || '').trim();
@@ -235,6 +259,10 @@ router.post('/whiteboards/n/archive', editor, asyncHandler(async (req, res) => {
   }
   const category = String(body.category || '').trim() || db.categories[0]?.id || 'work';
   if (!db.categories.some(item => item.id === category)) return send(res, 400, { error: 'Category not found' });
+  if (getCategoryAncestorIds(db.categories, category).some(id => {
+    const scope = normalizeNotebookIds(db.categories.find(item => item.id === id).notebookId);
+    return scope.length && !scope.includes(notebookId);
+  })) return send(res, 400, { error: '分类不属于所选 Notebook' });
   const timestamp = nowIso();
   const note = {
     id: nextId(db.notes), title: title.slice(0, 200), category, notebookId,
@@ -249,6 +277,7 @@ router.post('/whiteboards/n/archive', editor, asyncHandler(async (req, res) => {
   whiteboard.content = '';
   whiteboard.version = (Number(whiteboard.version) || 1) + 1;
   whiteboard.updatedAt = timestamp;
+  db.diaryConversions[body.requestId] = { fingerprint, result: { note, whiteboard: publicWhiteboard(whiteboard) } };
   await persistDB();
   return send(res, 201, { note, whiteboard: publicWhiteboard(whiteboard) });
 }));
@@ -285,6 +314,21 @@ router.get('/notes', viewer, asyncHandler(async (req, res) => {
   }
 
   send(res, 200, notes);
+}));
+
+router.get('/export', editor, asyncHandler(async (_req, res, next) => {
+  const archive = await exportAllNotes();
+  res.download(archive.file, 'noteflow-notes.zip', error => {
+    void archive.cleanup();
+    if (error && !res.headersSent) next(error);
+  });
+}));
+
+router.get('/notes/:id/export', editor, asyncHandler(async (req, res) => {
+  const db = await loadDB();
+  const note = db.notes.find(item => item.id === Number(req.params.id));
+  if (!note) return send(res, 404, { error: 'Note not found' });
+  res.attachment(`note-${note.id}.md`).type('text/markdown').send(noteMarkdown(note, db));
 }));
 
 router.get('/notes/:id', viewer, asyncHandler(async (req, res) => {
@@ -376,7 +420,7 @@ router.put('/notes/:id', editor, asyncHandler(async (req, res) => {
   db.notes[index] = updated;
   bindNotebookToCategoryAncestors(db, updated.category, updated.notebookId);
   await persistDB();
-  await cleanupUnreferencedCmsUploads({ notes: db.notes, candidates: previousImages });
+  await cleanupUnreferencedCmsUploads({ notes: referenceDocuments(db), candidates: previousImages });
   return send(res, 200, updated);
 }));
 
@@ -389,7 +433,7 @@ router.delete('/notes/:id', editor, asyncHandler(async (req, res) => {
   db.notes = db.notes.filter(note => note.id !== id);
   if (db.notes.length === before) return send(res, 404, { error: 'Note not found' });
   await persistDB();
-  await cleanupUnreferencedCmsUploads({ notes: db.notes, candidates: previousImages });
+  await cleanupUnreferencedCmsUploads({ notes: referenceDocuments(db), candidates: previousImages });
   return send(res, 200, { ok: true });
 }));
 
@@ -545,14 +589,16 @@ router.post('/media', editor, (req, res) => {
     if (error || !req.file) return send(res, 400, { error: error?.message || 'Select an MP4, WebM, or Ogg video' });
     try {
       const meta = await probeVideo(req.file.path);
-      const db = await loadDB();
       const id = `media_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const posterName = `${id}.jpg`;
       fs.mkdirSync(videoPosterDir, { recursive: true });
       await execFileAsync('ffmpeg', ['-y', '-ss', '0', '-i', req.file.path, '-frames:v', '1', '-vf', 'scale=640:-2', path.join(videoPosterDir, posterName)], { maxBuffer: 1024 * 1024 });
       const item = { id, originalName: decodeUploadName(req.file.originalname), mime: req.file.mimetype, size: req.file.size, duration: meta.duration, width: meta.width, height: meta.height, url: `/uploads/cms/videos/${req.file.filename}`, posterUrl: `/uploads/cms/video-posters/${posterName}`, createdAt: nowIso() };
-      db.media.unshift(item);
-      await persistDB();
+      await withTransaction(async () => {
+        const db = await loadDB();
+        db.media.unshift(item);
+        await persistDB();
+      });
       return send(res, 201, item);
     } catch (probeError) {
       await fsp.unlink(req.file.path).catch(() => {});

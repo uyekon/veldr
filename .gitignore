@@ -4,6 +4,9 @@ frontend/dist/
 cms-frontend/dist/
 frontend/.vercel/
 artifacts/
+cms-frontend/test-results/
+cms-frontend/playwright-report/
+backend/var/
 .ui-kit/
 
 # Runtime state and user-generated media

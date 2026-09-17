@@ -20,7 +20,7 @@ export const notesViewMethods = {
   },
 
   isArchivedNote(note) {
-    return (note?.tags || []).some((tag) => String(tag).toLowerCase() === 'archived');
+    return (note?.tags || []).some((tag) => String(tag).trim().toLowerCase() === 'archived');
   },
 
   getAllScopedNotes() {
@@ -54,7 +54,7 @@ export const notesViewMethods = {
     }
     else if (this.currentFilter.startsWith('tag:')) {
       const tag = this.currentFilter.slice(4);
-      notes = notes.filter(n => Array.isArray(n.tags) && n.tags.includes(tag));
+      notes = notes.filter(n => tag === 'archived' ? this.isArchivedNote(n) : Array.isArray(n.tags) && n.tags.includes(tag));
     }
     else if (this.currentFilter === 'notag') {
       notes = notes.filter(n => !Array.isArray(n.tags) || n.tags.length === 0);
@@ -116,6 +116,7 @@ export const notesViewMethods = {
   },
 
   showDetail(id) {
+    if (!this.confirmWhiteboardExit?.()) return;
     const note = this._notes.find(n => n.id === id);
     if (!note) return;
     this.currentNote = note;
@@ -141,6 +142,7 @@ export const notesViewMethods = {
     ].join('');
     const isArchived = (note.tags || []).some((tag) => String(tag).toLowerCase() === 'archived');
     const editBtn = isEditor ? `<button class="btn btn--secondary" style="margin-left:auto" data-action="open-note-modal" data-id="${note.id}">✏️ 编辑</button><button class="btn btn--secondary" data-action="toggle-archive" data-id="${note.id}">${isArchived ? '取消归档' : '归档'}</button>` : '';
+    const exportBtn = isEditor ? `<button class="btn btn--secondary" data-action="export-note" data-id="${note.id}">导出 Markdown</button>` : '';
     const contentHTML = this.renderMarkdown(note.content);
     const isMobileDetail = window.matchMedia('(max-width:768px)').matches;
 
@@ -163,6 +165,7 @@ export const notesViewMethods = {
           <div><span>最近更新</span><strong>${this.escapeHTML(note.updatedAt || note.date || '—')}</strong></div>
         </div>
         ${(note.tags?.length || note.starred || note.pinned) ? `<div class="detail-mobile__chips">${(note.tags || []).map((tag) => `<span>#${this.escapeHTML(tag)}</span>`).join('')}${note.starred ? '<span>★ 已收藏</span>' : ''}${note.pinned ? '<span>📌 已置顶</span>' : ''}</div>` : ''}
+        ${exportBtn}
         <div class="detail-mobile__body"><div class="detail__content">${contentHTML}</div></div>
       </section>
     ` : `
@@ -170,7 +173,7 @@ export const notesViewMethods = {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
         返回列表
       </button>
-      <div class="detail__meta">${metaHTML}${editBtn}</div>
+      <div class="detail__meta">${metaHTML}${editBtn}${exportBtn}</div>
       <div class="detail__content">${contentHTML}</div>
     `;
     this.renderDetailToc(detailEl);
@@ -252,6 +255,7 @@ export const notesViewMethods = {
         <p class="content-header__desc">${desc}</p>
       </div>
       <div class="stats-bar">
+        ${isEditor ? '<button class="btn btn--secondary" data-action="export-all">导出全部文章及附件</button>' : ''}
         <div class="stat-pill">📄 共 <strong id="totalNotes">${notes.length}</strong> 篇笔记</div>
         <div class="stat-pill">🕐 最近更新：<strong id="lastUpdated">${notes.length ? notes[0].date : '—'}</strong></div>
         <label class="notes-sort">排序<select id="notesSort"><option value="updated" ${this.notesSort === 'updated' ? 'selected' : ''}>最近更新</option><option value="created" ${this.notesSort === 'created' ? 'selected' : ''}>创建时间</option><option value="title" ${this.notesSort === 'title' ? 'selected' : ''}>标题</option><option value="starred" ${this.notesSort === 'starred' ? 'selected' : ''}>收藏优先</option></select></label>

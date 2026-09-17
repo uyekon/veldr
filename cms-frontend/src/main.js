@@ -50,6 +50,13 @@ const boot = () => {
     if (!document.hidden) App.refreshFromServer('visibility');
   });
   window.addEventListener('focus', () => App.refreshFromServer('focus'));
+  window.addEventListener('online', () => {
+    if (App.role !== 'editor') return;
+    for (const [id, state] of Object.entries(App.whiteboardStates)) {
+      if (state.dirty && !state.conversionRequest) void App.saveWhiteboard({ id, quiet: true });
+    }
+    if (App.autosaveDirty) void App.autosaveNote();
+  });
 
   // 窗口跨过 1200px 断点时同步目录栏显隐
   const tocMediaQuery = window.matchMedia('(min-width: 1200px)');
@@ -120,6 +127,9 @@ const boot = () => {
       return;
     }
     if (e.key === 'Escape') {
+      if (document.getElementById('diaryArchiveModal')?.classList.contains('modal-overlay--active')) {
+        e.preventDefault(); App.closeDiaryArchiveModal(); return;
+      }
       const draftRecoveryModal = document.getElementById('draftRecoveryModal');
       if (draftRecoveryModal?.classList.contains('modal-overlay--active')) {
         App.resolveDraftRecovery(false);

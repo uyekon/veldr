@@ -23,6 +23,8 @@ const clickActions = {
   'toggle-star': (App, el) => App.toggleStar(Number(el.dataset.id)),
   'toggle-pin': (App, el) => App.togglePin(Number(el.dataset.id)),
   'toggle-archive': (App, el) => App.toggleArchive(Number(el.dataset.id)),
+  'export-note': (App, el) => App.exportNotes(Number(el.dataset.id)),
+  'export-all': (App) => App.exportNotes(),
   'delete-note': (App, el) => App.deleteNoteDirect(Number(el.dataset.id)),
   'open-note-modal': (App, el) => {
     if (el.closest('.mobile-drawer')) App.closeMobileDrawer();
@@ -113,6 +115,7 @@ export function installDelegation(App) {
   const bind = (id, type, handler) => document.getElementById(id)?.addEventListener(type, handler);
 
   bind('searchInput', 'input', () => App.filter());
+  bind('diaryArticleNotebook', 'change', () => App.renderDiaryCategories());
   bind('noteTitle', 'input', () => App.scheduleAutosave());
   bind('noteTags', 'input', () => App.scheduleAutosave());
   bind('noteDesc', 'input', () => App.scheduleAutosave());

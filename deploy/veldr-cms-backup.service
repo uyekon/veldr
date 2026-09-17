@@ -1,0 +1,9 @@
+[Unit]
+Description=Verified CMS data and attachment backup
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/veldr/backend
+Environment=CMS_BACKUP_DIR=/opt/veldr/backups/cms
+ExecStart=/usr/bin/node scripts/cms-backup.js backup --kind daily
+UMask=0077

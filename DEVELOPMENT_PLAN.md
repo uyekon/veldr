@@ -144,4 +144,6 @@
 
 ## 阶段四实现进展
 
-已实现“现有 Webadmin → App”的安全首次导入切片：移动端可使用 Webadmin 凭据获取设备 Bearer 会话，将 PostgreSQL v1 bootstrap 的 UUID 资料导入本地库，并保存 cursor。连接后的本机笔记、白板、Notebook 与分类变更会写入设备本地 mutation outbox，并对同一实体合并为一个稳定的幂等记录；未连接用户不创建队列，也不会访问 API。此版本尚未开放 outbox 上传、附件二进制同步、自动合并或实时推送，生产 PostgreSQL 切换和完整双向同步仍需按阶段四后续计划执行。详见 [阶段四首个同步切片](deploy/PHASE_FOUR.md) 与 [双轨同步架构](deploy/SYNC_ARCHITECTURE.md)。
+生产已切换到 PostgreSQL。现有 Webadmin 是第一份 App 同步资料库：移动端可取得 Bearer 会话和一致性 bootstrap，并保存 cursor；连接后的笔记、白板、Notebook 与分类创建会进入本地 mutation outbox。当前已接通前台手动上传、幂等重试、游标增量拉取和笔记/白板版本冲突界面，未连接用户不创建队列，也不会访问 API。
+
+阶段四仍未完成附件二进制同步、Notebook/分类的完整更新删除、后台自动同步、实时推送、订阅账号和买断同步密钥库。本轮只收尾 Web/CMS 稳定性，这些功能明确延期。详见 [阶段四交付状态](deploy/PHASE_FOUR.md) 与 [双轨同步架构](deploy/SYNC_ARCHITECTURE.md)。

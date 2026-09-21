@@ -1,297 +1,140 @@
-# Veldr / NoteFlow Handoff
-
-Date: 2026-07-24
-Workspace: `C:\_dD\00packages\src\veldr`
-Repository target: `lieshy521-9577/veldr`
-
-## Current Status
-
-This repo currently contains:
-
-- `backend/`: shared Node/Express backend for Veldr articles and NoteFlow CMS.
-- `frontend/`: Veldr frontend, usually served locally on `http://localhost:5173`.
-- `cms-frontend/`: NoteFlow CMS frontend, usually served locally on `http://localhost:5174`.
-- `scripts/`: deployment scripts for frontends, backend, nginx, and runtime data flows.
-
-The current working tree has uncommitted changes:
-
-- `backend/modules/cms/cmsRoutes.js`
-- `backend/tests/cms.test.js`
-- `cms-frontend/index.html`
-- `cms-frontend/package-lock.json`
-- `cms-frontend/package.json`
-- `cms-frontend/public/app.js`
-- `cms-frontend/src/markdown-runtime.js`
-
-Ignored local runtime/config files matter for deployment:
-
-- `backend/.env.prod` is ignored by git.
-- `backend/public/data/cms/` is ignored by git.
-- `cms-frontend/dist/` is ignored by git.
-
-## Completed Recently
-
-### Security / Auth
-
-- Veldr article write APIs, upload write APIs, and password mutation APIs were moved behind backend auth.
-- Password storage was changed away from plain text for Veldr main admin flows.
-- Frontend auth was adjusted to rely on backend session/cookie state rather than localStorage as the source of truth.
-
-### CMS Integration
-
-- `github-cms` was removed from the active direction.
-- CMS frontend was migrated into this repo as `cms-frontend/`.
-- The backend now serves NoteFlow CMS APIs under `/api/cms`.
-- Veldr frontend and CMS frontend remain independent frontends over the same backend.
-
-### NoteFlow CMS UI
-
-- Desktop card/tag layout was improved.
-- Mobile navigation was redesigned around:
-  - compact top navigation
-  - Notebook bottom sheet
-  - Filter bottom sheet
-  - hidden sidebar/toc on mobile
-- Notebook behavior:
-  - `Docs` is the aggregate/all-notes view.
-  - Other notebooks are scoped views.
-  - Tags are global, but tag filtering is applied within the current notebook scope.
-
-### Markdown Editor
-
-- Adopted the lightweight route: `textarea + live preview`, not CodeMirror.
-- Added dependencies:
-  - `marked`
-  - `dompurify`
-- Added shared Markdown rendering in `cms-frontend/src/markdown-runtime.js`.
-- Details page and editor preview use the same render path when available.
-- Toolbar now supports common Markdown inserts:
-  - H1, H2
-  - Bold, Italic
-  - Quote
-  - UL, OL, Task
-  - Inline code, code block
-  - Table
-  - Link
-  - Image
-- Editor supports:
-  - split/write/preview modes
-  - mobile default write mode
-  - word/line/read-time/notebook status bar
-  - keyboard shortcuts
-  - Tab / Shift+Tab indentation
-  - pasted image upload
-  - dropped image upload
+# Veldr / NoteFlow 技术交接
 
-### Single-User Sync
+更新时间：2026-09-21
 
-The CMS now has a lightweight single-user sync model:
+代码目录：`/opt/veldr-repo`
 
-- Notes have normalized `version`, `createdAt`, and `updatedAt`.
-- Existing legacy notes are returned with fallback metadata.
-- `PUT /api/cms/notes/:id` rejects stale writes with `409 VERSION_CONFLICT`.
-- Frontend sends current note version on update.
-- Frontend autosaves existing notes after a debounce.
-- Frontend refreshes from server on focus/visibility return.
-- Conflict handling lets the user either load the server copy or force overwrite.
+分支：`main`
 
-## Verification Already Done
+远端：`github-lifetip:uyekon/veldr.git`
 
-These checks passed during the latest work:
+## 当前状态
 
-- Backend test suite passed.
-- `npm run build` passed in `cms-frontend`.
-- Markdown rendering verified in browser:
-  - headings
-  - table
-  - task list
-  - delete text
-  - blockquote
-  - fenced code block
-  - script/XSS input did not execute
-- Mobile editor verified at narrow viewport:
-  - default write mode
-  - preview hidden until switched
-  - toolbar horizontally scrolls instead of overflowing
-- Autosave verified:
-  - existing note version incremented from `1` to `2`
-  - frontend showed autosave status
-  - no browser console error/warn was observed during that test
+- NoteFlow CMS 已在生产使用 PostgreSQL，`GET /api/health` 应返回 `cmsStore: postgres`。
+- CMS Web 通过服务端 API 读写，不使用 IndexedDB 保存业务数据。
+- Flutter App 已具备离线本地版，以及 Webadmin 文本数据的前台手动同步试验链路。
+- 当前生产发布以站点 `/release.json` 为准；不要从未提交工作区直接构建。
+- 本文件不保存管理员密码、JWT、数据库密码、备份密码或 SSH 私钥。
 
-Screenshots from the latest browser QA:
+## 生产布局
 
-- `C:\Users\indep\AppData\Local\Temp\noteflow-markdown-editor-desktop.png`
-- `C:\Users\indep\AppData\Local\Temp\noteflow-markdown-editor-mobile-true.png`
-- `C:\Users\indep\AppData\Local\Temp\noteflow-autosave-version.png`
+| 项目 | 位置或名称 |
+|---|---|
+| 源代码 | `/opt/veldr-repo` |
+| 后端运行目录 | `/opt/veldr/backend` |
+| CMS 前端目录 | `/var/www/veldr-cms/dist` |
+| 后端服务 | `veldr-backend.service` |
+| PostgreSQL 数据库 | `veldr_cms`，仅本机访问 |
+| CMS 域名 | `https://cms.lifetip.top` |
+| PostgreSQL 备份 | `/opt/veldr/backups/cms-postgres` |
+| 发布产物 | `/opt/veldr-releases` |
 
-## Important Risks Before Publishing
+定时任务：
 
-### 1. CMS Auth Is Still Lightweight
+- `veldr-cms-postgres-backup.timer`：每日 03:00（Asia/Shanghai），自带随机延迟。
+- `veldr-cms-upload-cleanup.timer`：每日 03:20，自带随机延迟。
+- PostgreSQL 备份包含 `database.dump`、全部 CMS 上传文件和 SHA-256 清单；配置 restic 后会同步异地。
 
-CMS auth currently checks the editor key directly. It is not yet the same HttpOnly Cookie + JWT flow used by the Veldr admin auth.
+## 已完成能力
 
-Relevant files:
+### Web/CMS
 
-- `backend/modules/cms/cmsAuth.js`
-- `backend/modules/cms/cmsRoutes.js`
+- 统一管理员 Cookie/JWT 会话、登录限流和密码变更后会话失效。
+- Notebook、父子分类、分类多 Notebook 绑定、标签作用域、置顶和归档筛选。
+- 五个标准白板、日记自动保存及“转文章并清空日记”的幂等事务流程。
+- Markdown 编辑、预览、图片粘贴/拖放和最大 500 MB 视频上传。
+- 自动保存串行化、版本冲突判断、本地草稿和显式冲突选择。
+- Markdown/ZIP 导出、附件清理、发布回滚与备份恢复工具。
 
-Risk:
+### PostgreSQL 与同步基础
 
-- A six-digit password is convenient for one-person multi-device use, but weak if directly exposed to the public internet.
-- `/api/cms/auth` should get rate limiting before production exposure.
-- Consider adding one of these before or soon after publishing:
-  - `express-rate-limit` on `/api/cms/auth`
-  - Cloudflare Access
-  - Nginx IP allowlist
-  - VPN-only access
-  - migrating CMS auth to the existing backend JWT cookie flow
+- 生产已从 JSON 切换到 PostgreSQL；旧 `/api/cms` 保持兼容。
+- `/api/v1/cms` 使用 UUID、`mutationId`、`baseVersion`、软删除墓碑和游标增量。
+- Webadmin 既有数据归属于固定 `CMS_OWNER_ID`，是第一份 App 同步资料库。
+- App 已支持文本实体 outbox 上传、游标增量拉取和“保留本机/使用服务器”冲突处理。
 
-### 2. Local CMS Runtime Data Contains Test Text
+### 移动端本地版
 
-Local ignored CMS data currently includes autosave test text:
+- SQLite 本地优先，未连接同步时不会产生业务 API 流量。
+- 离线笔记、日记、白板、分类、标签、图片和完整 ZIP 备份恢复。
+- Linux 环境下 Flutter 静态检查与自动化测试已通过；iOS 真机验收仍需 macOS/Xcode。
 
-- `backend/public/data/cms/db.json`
+## 发布与回滚
 
-Known marker:
+构建固定提交：
 
-- `Autosave QA 1784873376426`
-
-If local CMS data is uploaded to the server, clean this first unless the test note is intentionally kept.
-
-### 3. Backend Deploy Does Not Upload Local Runtime Data by Default
-
-The backend deploy script intentionally excludes runtime data and uploads:
-
-- `backend/public/data`
-- `backend/public/uploads`
-
-This protects server data during normal backend releases, but it means local notes and images will not be transferred unless a separate data sync/upload step is used.
-
-Relevant file:
-
-- `scripts/deploy-backend.ps1`
-
-### 4. CMS Password Can Be Changed From Frontend
-
-CMS now supports changing the editor password from the frontend while in editor mode.
-
-Implementation:
-
-- `PUT /api/cms/password`
-- requires editor access
-- verifies the current editor password
-- accepts a new 6-digit numeric password
-- persists it to the CMS secret file
-- the CMS secret file now takes precedence over `.env.prod`
-
-`backend/.env.prod` is still ignored by git, but after the first frontend password change the runtime secret becomes the durable CMS password source.
-
-### 5. Autosave Conflict Reload Edge Case Fixed
-
-The conflict reload path now suppresses autosave while remote note content is copied into the editor.
-
-Fixed area:
-
-- `cms-frontend/public/app.js`
-
-This should avoid unnecessary version increments after choosing the server copy during a version conflict.
-
-## Deployment Notes
-
-Server IP previously used:
-
-- `8.159.128.180`
-
-Domains observed:
-
-- `lifetip.top`
-- `node.lifetip.top`
-- `notes.lifetip.top`
-- `cms.lifetip.top`
-
-Local SSH key requested by user:
-
-- `C:\Users\indep\.ssh\id_ed25519`
-
-Before publishing, confirm:
-
-- Backend env contains a deliberate `DEFAULT_PASSWORD` and `JWT_SECRET`.
-- Backend runs on Node 20.x.
-- Frontend deploy uploads complete `dist/` directories, including `assets/`.
-- Nginx proxies `/api/` and `/uploads/` to backend correctly.
-- CMS frontend `config.js` points to the intended `/api/cms` and `/uploads/cms`.
-- Decide whether this release should preserve server data or overwrite/sync from local data.
-
-## Suggested Next Steps
-
-1. Add rate limit to `/api/cms/auth`.
-2. Clean local test text from CMS runtime data if local data will be published.
-3. Verify frontend password change in the browser before publishing.
-4. Run:
-   - `npm test -- --hookTimeout=30000` in `backend`
-   - `npm run build` in `cms-frontend`
-   - `git diff --check`
-5. Commit the current feature set.
-6. Publish backend and frontends.
-7. If needed, separately sync CMS data and uploaded images to the server.
-
-## Useful Local Commands
-
-Backend:
-
-```powershell
-cd C:\_dD\00packages\src\veldr\backend
-npm test -- --hookTimeout=30000
-npm start
-```
-
-CMS frontend:
-
-```powershell
-cd C:\_dD\00packages\src\veldr\cms-frontend
-npm run build
-npm run dev -- --host 0.0.0.0 --port 5174
-```
-
-Git review:
-
-```powershell
-cd C:\_dD\00packages\src\veldr
+```bash
+cd /opt/veldr-repo
 git status --short
-git diff --check
+git rev-parse HEAD
+node scripts/build-cms-release.mjs COMMIT /opt/veldr-releases/唯一目录名
 ```
 
-## Product Direction
+激活发布：
 
-The current direction is a private-server, single-user, Notion-like writing system:
+```bash
+node scripts/cms-release.mjs activate \
+  --source /opt/veldr-releases/唯一目录名 \
+  --backend /opt/veldr/backend \
+  --frontend /var/www/veldr-cms/dist \
+  --service veldr-backend \
+  --health-url http://127.0.0.1:5000/api/health \
+  --site-url https://cms.lifetip.top/
+```
 
-- optimized for one person using multiple devices
-- lightweight sync through central backend
-- independent frontends over a shared backend
-- Markdown-first, fast, portable content
-- not designed yet for multi-user concurrent editing
+发布脚本会先检查空间、Nginx 路径、服务状态和产物哈希。生产为 PostgreSQL 时，必须先完成原生 PostgreSQL、附件及异地备份；任一步骤失败都会停止发布。JSON 模式才使用旧的 `db.json` 快照。
 
-Near-term improvements that fit this direction:
+激活成功会输出 `previousBackend` 和 `previousFrontend`。需要回滚时，使用同一脚本的 `rollback` 命令并显式传入这两个目录；运行时数据不随代码目录回滚。
 
-- simple but safer CMS auth
-- autosave polish
-- conflict UX polish
-- image management and cleanup
-- import/export for Markdown notes
-- backup/restore scripts
-- optional passcode-friendly mobile login
+## 验证命令
 
-## Server Runtime Note
+```bash
+cd /opt/veldr-repo/backend
+TEST_CMS_DATABASE_URL=postgresql://独立测试账号@127.0.0.1:5432/独立测试库 npm test
 
-The production backend service now runs through `n` managed Node 20:
+cd /opt/veldr-repo/cms-frontend
+npm test
+npm run build
+npm run test:e2e
 
-- Node manager: `n`
-- Node binary: `/usr/local/bin/node`
-- Node version: `v20.20.2`
-- npm version: `10.8.2`
-- systemd service: `/etc/systemd/system/veldr-backend.service`
-- `ExecStart=/usr/local/bin/node server.js`
+cd /opt/veldr-repo/frontend
+npm ci
+npm run build
 
-The local systemd template was updated accordingly:
+cd /opt/veldr-repo/mobile
+/opt/flutter-sdk/bin/flutter analyze
+/opt/flutter-sdk/bin/flutter test
+```
 
-- `deploy/systemd/veldr-backend.service`
+生产发布后至少检查：
+
+```bash
+curl -fsS https://cms.lifetip.top/api/health
+curl -fsS https://cms.lifetip.top/release.json
+systemctl status veldr-backend --no-pager
+systemctl list-timers --all --no-pager
+journalctl -u veldr-backend --since '-15 minutes' --no-pager
+```
+
+## 备份恢复注意事项
+
+- 发布前备份与每日备份必须使用 `backend/scripts/cms-postgres-backup.js`。
+- 先对备份执行 `verify`；恢复先使用不带 `--apply` 的预览模式。
+- 恢复演练只能使用独立数据库和独立附件目录，禁止把测试恢复指向生产路径。
+- PostgreSQL 已产生新写入后，不得用旧 `db.json` 覆盖生产。
+
+## 明确未完成
+
+- App 附件二进制上传、下载、去重、断点续传及跨端离线附件。
+- Notebook/分类在 App 中的完整更新、删除同步，以及后台自动同步。
+- WebSocket、APNs/FCM 唤醒和接近实时同步。
+- 订阅账号、StoreKit 权益、买断同步密钥库、多用户资料库和账号删除。
+- Xcode 签名、iOS release、真机中文输入/飞行模式/恢复测试和 TestFlight。
+
+这些任务不应被描述为已完成。附件同步和商业服务端并非必须依赖 Mac，而是本轮按范围主动延期。
+
+## 已知技术债
+
+- `frontend/` 的旧 TinyMCE/Vite 链存在需跨主版本解决的依赖公告；生产 CMS 不使用该 TinyMCE。升级时需单独回归 Veldr 文章编辑器。
+- Sequelize 6 内部依赖旧 UUID 包，当前审计为中风险；不得按审计建议降级 Sequelize，应在后续数据库层升级或移除旧 ORM 时解决。
+- CMS 的运行时 `config.js` 故意使用普通脚本注入，Vite 构建会提示不能打包，但不影响产物。

@@ -101,6 +101,32 @@ export async function rollbackRelease({ backend, frontend, previousBackend, prev
   }
 }
 
+export async function createPreReleaseBackup({
+  store,
+  backend,
+  config,
+  createJsonBackup,
+  pruneJsonBackups,
+  runPostgresBackup,
+  postgresBackupDir,
+}) {
+  if (store === 'postgres') {
+    const backupDir = path.resolve(postgresBackupDir || path.join(backend, '../backups/cms-postgres'));
+    await runPostgresBackup({ backupDir });
+    return { kind: 'postgres', location: backupDir };
+  }
+  if (store !== 'json') throw new Error(`Unsupported CMS store for release backup: ${store}`);
+  const backupDir = path.resolve(backend, '../backups/cms');
+  const savedBackup = await createJsonBackup({
+    dbFile: path.join(path.resolve(backend, config.cms.dataDir), config.cms.dbFile),
+    uploadDir: path.resolve(backend, config.cms.uploadDir),
+    backupDir,
+    kind: 'release',
+  });
+  await pruneJsonBackups(backupDir);
+  return { kind: 'json', location: savedBackup };
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   const get = key => args[args.indexOf(key) + 1];
@@ -155,13 +181,23 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     // Incoming releases have no node_modules yet; this module uses only Node
     // built-ins. Resolve data paths from the live config, not incoming defaults.
     const { createBackup, pruneBackups } = await import(pathToFileURL(backupModule).href);
-    const backupDir = path.resolve(backend, '../backups/cms');
-    const savedBackup = await createBackup({
-      dbFile: path.join(path.resolve(backend, config.cms.dataDir), config.cms.dbFile),
-      uploadDir: path.resolve(backend, config.cms.uploadDir), backupDir, kind: 'release',
+    const savedBackup = await createPreReleaseBackup({
+      store: config.cms.store,
+      backend,
+      config,
+      createJsonBackup: createBackup,
+      pruneJsonBackups: pruneBackups,
+      postgresBackupDir: process.env.CMS_POSTGRES_BACKUP_DIR,
+      runPostgresBackup: async ({ backupDir }) => {
+        execFileSync(process.execPath, [
+          'scripts/cms-postgres-backup.js',
+          'backup',
+          '--backup-dir',
+          backupDir,
+        ], { cwd: backend, stdio: 'inherit', env: process.env });
+      },
     });
-    console.log(`Pre-release backup: ${savedBackup}`);
-    await pruneBackups(backupDir);
+    console.log(`Pre-release ${savedBackup.kind} backup: ${savedBackup.location}`);
     if (args[0] === 'activate') {
       if (!args.includes('--source')) throw new Error('--source required');
       const result = await activateRelease({ source: path.resolve(get('--source')), backend, frontend, ...hooks,

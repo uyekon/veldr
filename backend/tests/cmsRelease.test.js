@@ -3,7 +3,44 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { activateRelease, rollbackRelease } from '../../scripts/cms-release.mjs';
+import { activateRelease, createPreReleaseBackup, rollbackRelease } from '../../scripts/cms-release.mjs';
+
+it('selects a native PostgreSQL backup and aborts when it fails', async () => {
+  const calls = [];
+  const config = { cms: { dataDir: 'public/data/cms', dbFile: 'db.json', uploadDir: 'public/uploads/cms' } };
+  const result = await createPreReleaseBackup({
+    store: 'postgres', backend: '/opt/veldr/backend', config,
+    createJsonBackup: async () => { throw new Error('JSON backup must not run'); },
+    pruneJsonBackups: async () => {},
+    runPostgresBackup: async ({ backupDir }) => calls.push(backupDir),
+  });
+  expect(result).toEqual({ kind: 'postgres', location: '/opt/veldr/backups/cms-postgres' });
+  expect(calls).toEqual(['/opt/veldr/backups/cms-postgres']);
+  await expect(createPreReleaseBackup({
+    store: 'postgres', backend: '/opt/veldr/backend', config,
+    createJsonBackup: async () => {}, pruneJsonBackups: async () => {},
+    runPostgresBackup: async () => { throw new Error('remote backup failed'); },
+  })).rejects.toThrow('remote backup failed');
+});
+
+it('keeps verified JSON backups for JSON deployments', async () => {
+  const calls = [];
+  const config = { cms: { dataDir: 'runtime/cms', dbFile: 'db.json', uploadDir: 'runtime/uploads' } };
+  const result = await createPreReleaseBackup({
+    store: 'json', backend: '/srv/veldr/backend', config,
+    createJsonBackup: async (options) => { calls.push(['backup', options]); return '/srv/veldr/backups/cms/release-one'; },
+    pruneJsonBackups: async (directory) => calls.push(['prune', directory]),
+    runPostgresBackup: async () => { throw new Error('PostgreSQL backup must not run'); },
+  });
+  expect(result).toEqual({ kind: 'json', location: '/srv/veldr/backups/cms/release-one' });
+  expect(calls[0][1]).toMatchObject({
+    dbFile: '/srv/veldr/backend/runtime/cms/db.json',
+    uploadDir: '/srv/veldr/backend/runtime/uploads',
+    backupDir: '/srv/veldr/backups/cms',
+    kind: 'release',
+  });
+  expect(calls[1]).toEqual(['prune', '/srv/veldr/backups/cms']);
+});
 
 it('activates, rolls back failed health checks, and preserves live data on manual rollback', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'cms-release-test-'));

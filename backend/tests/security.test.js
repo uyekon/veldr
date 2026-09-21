@@ -24,6 +24,8 @@ beforeAll(async () => {
     AUTH_COOKIE_MAX_AGE_MS: String(60 * 24 * 60 * 60 * 1000),
     DEFAULT_PASSWORD: legacyPassword,
     ADMIN_USERNAME: username,
+    AUTH_COOKIE_NAME: 'veldr_auth',
+    AUTH_COOKIE_SECURE: 'false',
   });
   ({ app } = await import('../app.js'));
   ({ databases } = await import('../config/databases.js'));
@@ -61,6 +63,18 @@ describe('administrator authentication', () => {
     await request(app).post('/api/auth/login').send({ username: 'wrong', password: legacyPassword }).expect(401);
     await request(app).post('/api/auth/login').send({ username, password: 'bad' }).expect(401);
     await request(app).post('/api/password/verify').send({ password: legacyPassword }).expect(404);
+  });
+
+  it('issues a bearer session only to the opted-in native client', async () => {
+    const browser = await request(app).post('/api/auth/login').send({ username, password: legacyPassword }).expect(200);
+    expect(browser.body.accessToken).toBeUndefined();
+    const mobile = await request(app).post('/api/auth/login')
+      .send({ username, password: legacyPassword, client: 'noteflow-mobile' }).expect(200);
+    expect(mobile.body.accessToken).toEqual(expect.any(String));
+    await request(app).get('/api/auth/me')
+      .set('Authorization', `Bearer ${mobile.body.accessToken}`)
+      .expect(200)
+      .expect(({ body }) => expect(body).toMatchObject({ role: 'admin', username }));
   });
 
   it('blocks protected Veldr writes until the administrator signs in', async () => {

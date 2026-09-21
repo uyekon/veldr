@@ -83,8 +83,16 @@ const login = async (req, res) => {
       return res.status(401).json({ error: 'Invalid administrator credentials' });
     }
 
-    setAuthCookie(res, passwordRecord.sessionVersion);
-    return res.json({ role: 'admin', username: config.auth.adminUsername });
+    const accessToken = setAuthCookie(res, passwordRecord.sessionVersion);
+    const mobileClient = req.body?.client === 'noteflow-mobile';
+    return res.json({
+      role: 'admin',
+      username: config.auth.adminUsername,
+      // Native clients do not have the browser's httpOnly cookie jar.  They
+      // explicitly opt in, then store this same short-lived session JWT in
+      // the platform secure keystore. Browser logins remain cookie-only.
+      ...(mobileClient ? { accessToken } : {}),
+    });
   } catch (error) {
     console.error('Administrator login error:', error);
     return res.status(500).json({ error: 'Unable to sign in' });

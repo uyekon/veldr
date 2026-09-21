@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'node:crypto';
 
 const databaseUrl = process.env.TEST_CMS_DATABASE_URL;
 const suite = databaseUrl ? describe : describe.skip;
@@ -83,7 +84,8 @@ suite('CMS PostgreSQL compatibility and sync API', () => {
     const bootstrap = await agent.get('/api/v1/cms/sync/bootstrap').expect(200);
     const notebookId = bootstrap.body.entities.notebooks.find((item) => item.legacyId === 'nb').id;
     const categoryId = bootstrap.body.entities.categories.find((item) => item.legacyId === 'work').id;
-    const payload = { mutationId: 'create-note-test-0001', title: 'Synced', content: 'v1', notebookId, categoryId, tags: ['sync', 'SYNC'] };
+    const noteId = randomUUID();
+    const payload = { mutationId: 'create-note-test-0001', id: noteId, title: 'Synced', content: 'v1', notebookId, categoryId, tags: ['sync', 'SYNC'] };
     const [first, replay] = await Promise.all([
       agent.post('/api/v1/cms/notes').send(payload).expect(201),
       agent.post('/api/v1/cms/notes').send(payload).expect(201),
@@ -92,6 +94,7 @@ suite('CMS PostgreSQL compatibility and sync API', () => {
     const original = first.body.replayed ? replay : first;
     const repeated = first.body.replayed ? first : replay;
     expect(repeated.body).toMatchObject({ id: original.body.id, replayed: true });
+    expect(original.body.id).toBe(noteId);
     expect(original.body.tags).toEqual(['sync']);
     await agent.put(`/api/v1/cms/notes/${original.body.id}`).send({ mutationId: 'update-note-test-0001', baseVersion: original.body.version, content: 'v2' }).expect(200);
     await agent.put(`/api/v1/cms/notes/${original.body.id}`).send({ mutationId: 'update-note-test-0002', baseVersion: original.body.version, content: 'stale' }).expect(409);
@@ -104,11 +107,15 @@ suite('CMS PostgreSQL compatibility and sync API', () => {
 
   it('mutates notebook, category, and whiteboard metadata with versions', async () => {
     const agent = await editor();
-    const notebook = await agent.post('/api/v1/cms/notebooks').send({ mutationId: 'create-notebook-0001', label: 'Mobile' }).expect(201);
+    const notebookId = randomUUID();
+    const notebook = await agent.post('/api/v1/cms/notebooks').send({ mutationId: 'create-notebook-0001', id: notebookId, label: 'Mobile' }).expect(201);
+    expect(notebook.body.id).toBe(notebookId);
     expect(notebook.body.version).toBe(1);
     const updatedNotebook = await agent.put(`/api/v1/cms/notebooks/${notebook.body.id}`).send({ mutationId: 'update-notebook-0001', baseVersion: 1, label: 'Mobile notes' }).expect(200);
     expect(updatedNotebook.body).toMatchObject({ label: 'Mobile notes', version: 2 });
-    const category = await agent.post('/api/v1/cms/categories').send({ mutationId: 'create-category-0001', label: 'Trips', notebookIds: [notebook.body.id] }).expect(201);
+    const categoryId = randomUUID();
+    const category = await agent.post('/api/v1/cms/categories').send({ mutationId: 'create-category-0001', id: categoryId, label: 'Trips', notebookIds: [notebook.body.id] }).expect(201);
+    expect(category.body.id).toBe(categoryId);
     expect(category.body).toMatchObject({ label: 'Trips', version: 1, notebookIds: [notebook.body.id] });
     await agent.put(`/api/v1/cms/categories/${category.body.id}`).send({ mutationId: 'update-category-0001', baseVersion: 1, label: 'Travel' }).expect(200)
       .expect(({ body }) => expect(body).toMatchObject({ label: 'Travel', version: 2 }));
@@ -116,6 +123,9 @@ suite('CMS PostgreSQL compatibility and sync API', () => {
     const diary = boards.body.items.find((item) => item.legacyId === 'n');
     await agent.put(`/api/v1/cms/whiteboards/${diary.id}`).send({ mutationId: 'update-whiteboard-001', baseVersion: diary.version, content: 'offline-ready' }).expect(200)
       .expect(({ body }) => expect(body).toMatchObject({ content: 'offline-ready', version: diary.version + 1 }));
+    const boardId = randomUUID();
+    await agent.post('/api/v1/cms/whiteboards').send({ mutationId: 'create-whiteboard-001', id: boardId, legacyId: 'local-board', content: 'queued locally' }).expect(201)
+      .expect(({ body }) => expect(body).toMatchObject({ id: boardId, legacyId: 'local-board', version: 1 }));
     await agent.delete(`/api/v1/cms/categories/${category.body.id}`).send({ mutationId: 'delete-category-0001', baseVersion: 2 }).expect(200);
     await agent.delete(`/api/v1/cms/notebooks/${notebook.body.id}`).send({ mutationId: 'delete-notebook-0001', baseVersion: 2 }).expect(200);
   });

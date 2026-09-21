@@ -170,10 +170,11 @@ router.post('/notebooks', asyncHandler(async (req, res) => {
   if (!mutationId) return;
   const payload = { ...req.body }; delete payload.mutationId;
   if (!String(payload.label || '').trim()) return res.status(400).json({ error: 'label is required' });
+  if (payload.id !== undefined && !isUuid(payload.id)) return res.status(400).json({ error: 'id must be a UUID' });
   const result = await inTransaction(async (client) => runIdempotent({
     client, scope: 'v1:create-notebook', mutationId, payload,
     operation: async () => {
-      const id = uuidv7();
+      const id = payload.id || uuidv7();
       const legacyId = `notebook_${Date.now()}_${id.slice(-6)}`;
       const type = ['notebook', 'page'].includes(payload.type) ? payload.type : 'notebook';
       const inserted = await client.query(`INSERT INTO cms_navigation_items(id,owner_id,legacy_key,label,kind,content_key,content,sort_order)
@@ -262,6 +263,7 @@ router.post('/categories', asyncHandler(async (req, res) => {
   const mutationId = requireMutation(req, res); if (!mutationId) return;
   const payload = { ...req.body }; delete payload.mutationId;
   if (!String(payload.label || '').trim()) return res.status(400).json({ error: 'label is required' });
+  if (payload.id !== undefined && !isUuid(payload.id)) return res.status(400).json({ error: 'id must be a UUID' });
   if (payload.parentId && !isUuid(payload.parentId)) return res.status(400).json({ error: 'parentId must be a UUID' });
   if (payload.notebookIds !== undefined && !Array.isArray(payload.notebookIds)) return res.status(400).json({ error: 'notebookIds must be an array' });
   if ((payload.notebookIds || []).some((id) => !isUuid(id))) return res.status(400).json({ error: 'notebookIds must contain UUIDs' });
@@ -275,7 +277,7 @@ router.post('/categories', asyncHandler(async (req, res) => {
         const valid = await client.query('SELECT id FROM cms_navigation_items WHERE owner_id=$1 AND id=ANY($2::uuid[]) AND kind=\'notebook\' AND deleted_at IS NULL', [ownerId(), notebookIds]);
         if (valid.rowCount !== notebookIds.length) return { status: 400, body: { error: 'Notebook not found' } };
       }
-      const id = uuidv7(); const legacyId = `category-${id.slice(-12)}`;
+      const id = payload.id || uuidv7(); const legacyId = `category-${id.slice(-12)}`;
       await client.query(`INSERT INTO cms_categories(id,owner_id,legacy_key,label,parent_id,sort_order)
         VALUES($1,$2,$3,$4,$5,(SELECT COALESCE(max(sort_order),-1)+1 FROM cms_categories WHERE owner_id=$2))`, [id, ownerId(), legacyId, String(payload.label).trim(), payload.parentId || null]);
       for (const notebookId of notebookIds) await client.query('INSERT INTO cms_category_notebooks(category_id,notebook_id) VALUES($1,$2)', [id, notebookId]);
@@ -364,6 +366,28 @@ router.get('/whiteboards', asyncHandler(async (_req, res) => {
   res.json({ items: result.rows });
 }));
 
+router.post('/whiteboards', asyncHandler(async (req, res) => {
+  const mutationId = requireMutation(req, res); if (!mutationId) return;
+  const payload = { ...req.body }; delete payload.mutationId;
+  if (payload.id !== undefined && !isUuid(payload.id)) return res.status(400).json({ error: 'id must be a UUID' });
+  if (!/^[a-z][a-z0-9_-]{0,63}$/i.test(String(payload.legacyId || ''))) return res.status(400).json({ error: 'legacyId is invalid' });
+  if (typeof payload.content !== 'string' || payload.content.length > 200000) return res.status(400).json({ error: 'content is required and must be at most 200000 characters' });
+  const result = await inTransaction(async (client) => runIdempotent({
+    client, scope: 'v1:create-whiteboard', mutationId, payload,
+    operation: async () => {
+      const id = payload.id || uuidv7();
+      const exists = await client.query('SELECT id FROM cms_whiteboards WHERE owner_id=$1 AND (id=$2 OR legacy_key=$3) LIMIT 1', [ownerId(), id, payload.legacyId]);
+      if (exists.rowCount) return { status: 409, body: { error: 'Whiteboard already exists', code: 'ENTITY_EXISTS' } };
+      const inserted = await client.query(`INSERT INTO cms_whiteboards(id,owner_id,legacy_key,content,archives)
+        VALUES($1,$2,$3,$4,'[]'::jsonb)
+        RETURNING id,legacy_key "legacyId",content,archives,version,created_at "createdAt",updated_at "updatedAt"`, [id, ownerId(), payload.legacyId, payload.content]);
+      const body = inserted.rows[0]; await addChange(client, 'whiteboard', body.id, 'upsert', body.version, body);
+      return { status: 201, body };
+    },
+  }));
+  res.status(result.status).json(result.body);
+}));
+
 router.get('/media', asyncHandler(async (_req, res) => {
   const result = await getCmsPool().query(`SELECT id,legacy_key "legacyId",original_name "originalName",mime,size_bytes "size",duration,width,height,url,poster_url "posterUrl",sha256,version,created_at "createdAt",updated_at "updatedAt"
     FROM cms_media_assets WHERE owner_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC`, [ownerId()]);
@@ -411,12 +435,13 @@ router.post('/notes', asyncHandler(async (req, res) => {
   const payload = { ...req.body };
   delete payload.mutationId;
   if (!String(payload.title || '').trim()) return res.status(400).json({ error: 'title is required' });
+  if (payload.id !== undefined && !isUuid(payload.id)) return res.status(400).json({ error: 'id must be a UUID' });
   if (payload.notebookId && !isUuid(payload.notebookId)) return res.status(400).json({ error: 'notebookId must be a UUID' });
   if (payload.categoryId && !isUuid(payload.categoryId)) return res.status(400).json({ error: 'categoryId must be a UUID' });
   const result = await inTransaction(async (client) => runIdempotent({
     client, scope: 'v1:create-note', mutationId, payload,
     operation: async () => {
-      const id = uuidv7();
+      const id = payload.id || uuidv7();
       const notebook = payload.notebookId ? await client.query('SELECT id FROM cms_navigation_items WHERE owner_id=$1 AND id=$2 AND kind=\'notebook\' AND deleted_at IS NULL', [ownerId(), payload.notebookId]) : null;
       const category = payload.categoryId ? await client.query('SELECT id FROM cms_categories WHERE owner_id=$1 AND id=$2 AND deleted_at IS NULL', [ownerId(), payload.categoryId]) : null;
       if (payload.notebookId && !notebook?.rowCount) return { status: 400, body: { error: 'Notebook not found' } };

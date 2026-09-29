@@ -254,7 +254,6 @@ export const notesViewMethods = {
     ].join('');
     const isArchived = (note.tags || []).some((tag) => String(tag).toLowerCase() === 'archived');
     const editBtn = isEditor ? `<button class="btn btn--secondary" style="margin-left:auto" data-action="open-note-modal" data-id="${note.id}">✏️ 编辑</button><button class="btn btn--secondary" data-action="toggle-archive" data-id="${note.id}">${isArchived ? '取消归档' : '归档'}</button>` : '';
-    const exportBtn = isEditor ? `<button class="btn btn--secondary" data-action="export-note" data-id="${note.id}">导出 Markdown</button>` : '';
     const contentHTML = this.renderMarkdown(note.content);
     const isMobileDetail = window.matchMedia('(max-width:768px)').matches;
 
@@ -277,7 +276,6 @@ export const notesViewMethods = {
           <div><span>最近更新</span><strong>${this.escapeHTML(note.updatedAt || note.date || '—')}</strong></div>
         </div>
         ${(note.tags?.length || note.starred || note.pinned) ? `<div class="detail-mobile__chips">${(note.tags || []).map((tag) => `<span>#${this.escapeHTML(tag)}</span>`).join('')}${note.starred ? '<span>★ 已收藏</span>' : ''}${note.pinned ? '<span>📌 已置顶</span>' : ''}</div>` : ''}
-        ${exportBtn}
         <div class="detail-mobile__body"><div class="detail__content">${contentHTML}</div></div>
       </section>
     ` : `
@@ -285,7 +283,7 @@ export const notesViewMethods = {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
         返回列表
       </button>
-      <div class="detail__meta">${metaHTML}${editBtn}${exportBtn}</div>
+      <div class="detail__meta">${metaHTML}${editBtn}</div>
       <div class="detail__content">${contentHTML}</div>
     `;
     this.renderDetailToc(detailEl);

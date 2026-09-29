@@ -57,6 +57,7 @@ test('indent and toggle blocks survive editing, preview and save', async ({ page
   await page.evaluate(() => window.App.closeModal({ force: true }));
   await page.evaluate(() => window.App.showDetail(1));
   await expect(page.locator('#detailView details.md-toggle')).toHaveCount(1);
+  await expect(page.locator('#detailView [data-action="export-note"]')).toHaveCount(0);
   await page.evaluate(() => window.App.openNoteModal(1));
   await expect(page.locator('#noteContentHost p[data-indent="2"]')).toContainText('缩进的 重点');
   await expect(page.locator('#noteContentHost .md-toggle__content li')).toHaveCount(2);

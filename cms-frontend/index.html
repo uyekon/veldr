@@ -360,6 +360,19 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
 .markdown-editor-host .tiptap p.is-editor-empty:first-child::before{content:attr(data-placeholder);float:left;height:0;color:var(--c400);pointer-events:none}
 .markdown-editor-host .tiptap ul,.markdown-editor-host .tiptap ol{margin:var(--s4) 0;padding-left:var(--s6)}
 .markdown-editor-host .tiptap li{padding-left:var(--s1);margin-bottom:var(--s2)}
+.markdown-editor-host .tiptap p[data-indent="1"]{margin-inline-start:16px}.markdown-editor-host .tiptap p[data-indent="2"]{margin-inline-start:32px}.markdown-editor-host .tiptap p[data-indent="3"]{margin-inline-start:48px}.markdown-editor-host .tiptap p[data-indent="4"]{margin-inline-start:64px}
+.md-indent--1{margin-inline-start:16px}.md-indent--2{margin-inline-start:32px}.md-indent--3{margin-inline-start:48px}.md-indent--4{margin-inline-start:64px}
+.markdown-editor-host .md-toggle,.markdown-preview .md-toggle,.detail__content .md-toggle{position:relative;margin:var(--s3) 0;padding:var(--s2) var(--s3);border:1px solid var(--c200);border-radius:9px;background:var(--c50)}
+.markdown-editor-host .md-toggle__summary{min-height:36px;padding:5px 4px 5px 36px;font-weight:600;outline:none}
+.markdown-editor-host .md-toggle__content{padding:var(--s2) 0 var(--s1) 36px}
+.markdown-editor-host .md-toggle--closed .md-toggle__content{display:none}
+.markdown-editor-host .md-toggle__button{position:absolute;top:var(--s2);left:var(--s3);width:32px;height:36px;border:0;border-radius:6px;background:transparent;color:var(--c600);cursor:pointer;font-size:1rem}
+.markdown-editor-host .md-toggle__button:hover,.markdown-editor-host .md-toggle__button:focus-visible{background:var(--c100);color:var(--a700)}
+.markdown-preview .md-toggle>summary,.detail__content .md-toggle>summary{display:flex;align-items:center;min-height:40px;list-style:none;cursor:pointer;font-weight:600;color:var(--c800)}
+.markdown-preview .md-toggle>summary::-webkit-details-marker,.detail__content .md-toggle>summary::-webkit-details-marker{display:none}
+.markdown-preview .md-toggle>summary::before,.detail__content .md-toggle>summary::before{content:'▸';display:inline-block;width:28px;flex:0 0 28px;color:var(--a700)}
+.markdown-preview .md-toggle[open]>summary::before,.detail__content .md-toggle[open]>summary::before{content:'▾'}
+.markdown-preview .md-toggle__content,.detail__content .md-toggle__content{padding:var(--s2) 0 var(--s1) 28px}
 .markdown-editor-host .tiptap blockquote{margin:var(--s4) 0;padding:var(--s2) var(--s4);border-left:3px solid var(--a400);border-radius:0 7px 7px 0;background:var(--a50);color:var(--c600)}
 .markdown-editor-host .tiptap code{font-family:var(--font-mono);font-size:.875em;padding:1px 5px;border-radius:4px;background:var(--c100);color:var(--a700)}
 .markdown-editor-host .tiptap pre{margin:var(--s4) 0;padding:var(--s4);overflow-x:auto;border-radius:8px;background:var(--c900);color:var(--a200)}
@@ -903,6 +916,8 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
       <div class="modal__field">
         <label class="modal__label">内容（支持 Markdown）</label>
         <div class="modal__toolbar">
+          <button type="button" class="modal__tool-btn modal__tool-btn--icon" data-action="markdown-format" data-format="outdent" title="减少缩进 Shift+Tab" aria-label="减少缩进">⇤</button>
+          <button type="button" class="modal__tool-btn modal__tool-btn--icon" data-action="markdown-format" data-format="indent" title="增加缩进 Tab" aria-label="增加缩进">⇥</button>
           <button type="button" class="modal__tool-btn modal__tool-btn--icon" data-action="markdown-format" data-format="h1" title="一级标题 Ctrl+Alt+1">H1</button>
           <button type="button" class="modal__tool-btn modal__tool-btn--icon" data-action="markdown-format" data-format="h2" title="二级标题 Ctrl+Alt+2">H2</button>
           <button type="button" class="modal__tool-btn modal__tool-btn--icon" data-action="markdown-format" data-format="h3" title="三级标题 Ctrl+Alt+3">H3</button>
@@ -912,6 +927,7 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
           <button type="button" class="modal__tool-btn modal__tool-btn--icon" data-action="markdown-format" data-format="ul" title="无序列表">UL</button>
           <button type="button" class="modal__tool-btn modal__tool-btn--icon" data-action="markdown-format" data-format="ol" title="有序列表">OL</button>
           <button type="button" class="modal__tool-btn modal__tool-btn--icon" data-action="markdown-format" data-format="task" title="任务列表 Ctrl+Shift+X">☑</button>
+          <button type="button" class="modal__tool-btn modal__tool-btn--icon" data-action="markdown-format" data-format="toggle" title="折叠列表" aria-label="折叠列表">▸☰</button>
           <button type="button" class="modal__tool-btn modal__tool-btn--icon" data-action="markdown-format" data-format="inlineCode" title="行内代码">`</button>
           <button type="button" class="modal__tool-btn modal__tool-btn--icon" data-action="markdown-format" data-format="codeBlock" title="代码块 Ctrl+Shift+C">{ }</button>
           <button type="button" class="modal__tool-btn modal__tool-btn--icon" data-action="markdown-format" data-format="table" title="表格">表</button>
@@ -1001,7 +1017,7 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
         <div class="shortcut-row"><span>有序 / 无序列表</span><kbd class="shortcut-key">Ctrl/Cmd + Shift + 7/8</kbd></div>
         <div class="shortcut-row"><span>代码块 / 任务列表</span><kbd class="shortcut-key">Ctrl/Cmd + Shift + C/X</kbd></div>
         <div class="shortcut-row"><span>切换预览模式</span><kbd class="shortcut-key">Ctrl/Cmd + Shift + P</kbd></div>
-        <div class="shortcut-row"><span>缩进 / 反缩进</span><kbd class="shortcut-key">Tab / Shift + Tab</kbd></div>
+        <div class="shortcut-row"><span>段落和列表：增加 / 减少缩进</span><kbd class="shortcut-key">Tab / Shift + Tab</kbd></div>
       </div>
     </div>
   </div>

@@ -545,6 +545,8 @@ export const editorMethods = {
   applyMarkdownFormat(type) {
     const editor = this.richEditor;
     if (!editor || this.currentEditorMode === 'source') return;
+    if (type === 'indent' || type === 'outdent') return this.changeEditorIndent(type === 'indent' ? 1 : -1);
+    if (type === 'toggle') return this.toggleEditorDetails();
     const chain = editor.chain().focus();
     const heading = { h1: 1, h2: 2, h3: 3 }[type];
     if (heading) chain.toggleHeading({ level: heading }).run();
@@ -561,6 +563,66 @@ export const editorMethods = {
       const href = prompt('链接地址', 'https://');
       if (href) chain.extendMarkRange('link').setLink({ href }).run();
     }
+  },
+
+  changeEditorIndent(delta) {
+    const editor = this.richEditor;
+    if (!editor || this.currentEditorMode === 'source') return false;
+    const listItem = editor.isActive('taskItem') ? 'taskItem' : editor.isActive('listItem') ? 'listItem' : null;
+    if (listItem) {
+      const chain = editor.chain().focus();
+      return (delta > 0 ? chain.sinkListItem(listItem) : chain.liftListItem(listItem)).run();
+    }
+    const { doc, selection } = editor.state;
+    const positions = [];
+    doc.nodesBetween(selection.from, Math.min(doc.content.size, Math.max(selection.to, selection.from + 1)), (node, position) => {
+      if (node.type.name === 'paragraph') positions.push({ node, position });
+    });
+    const changes = positions.filter(({ node }) => {
+      const current = Number(node.attrs.indent) || 0;
+      return Math.max(0, Math.min(4, current + delta)) !== current;
+    });
+    if (!changes.length) return false;
+    return editor.commands.command(({ tr, dispatch }) => {
+      changes.forEach(({ node, position }) => {
+        const indent = Math.max(0, Math.min(4, (Number(node.attrs.indent) || 0) + delta));
+        tr.setNodeMarkup(position, undefined, { ...node.attrs, indent });
+      });
+      dispatch?.(tr);
+      return true;
+    });
+  },
+
+  toggleEditorDetails() {
+    const editor = this.richEditor;
+    if (!editor || this.currentEditorMode === 'source') return false;
+    const { doc, selection } = editor.state;
+    const activeDepth = Array.from({ length: selection.$from.depth }, (_, index) => selection.$from.depth - index)
+      .find((depth) => selection.$from.node(depth).type.name === 'toggleItem');
+    if (activeDepth) {
+      const node = selection.$from.node(activeDepth);
+      const summary = node.child(0).toJSON().content || [];
+      const body = node.child(1).toJSON().content || [];
+      return editor.commands.insertContentAt({ from: selection.$from.before(activeDepth), to: selection.$from.after(activeDepth) }, [
+        { type: 'paragraph', content: summary }, ...body,
+      ]);
+    }
+    const first = doc.resolve(selection.from);
+    const last = doc.resolve(Math.max(selection.from, selection.to - 1));
+    const from = first.depth ? first.before(1) : selection.from;
+    const to = last.depth ? last.after(1) : selection.to;
+    const selected = doc.slice(from, to).content.toJSON();
+    const firstBlock = selected[0];
+    const summary = firstBlock?.type === 'paragraph' && firstBlock.content?.length
+      ? firstBlock.content : [{ type: 'text', text: '折叠标题' }];
+    const body = firstBlock?.type === 'paragraph' ? selected.slice(1) : selected;
+    return editor.commands.insertContentAt({ from, to }, {
+      type: 'toggleItem',
+      content: [
+        { type: 'toggleSummary', content: summary },
+        { type: 'toggleContent', content: body.length ? body : [{ type: 'paragraph' }] },
+      ],
+    });
   },
 
   deleteSelectedImage(options = {}) {
@@ -592,9 +654,10 @@ export const editorMethods = {
         }
       }
       if (event.key === 'Tab') {
-        const editor = this.richEditor;
-        const command = event.shiftKey ? editor.chain().focus().liftListItem('listItem') : editor.chain().focus().sinkListItem('listItem');
-        if (command.run()) return true;
+        if (this.changeEditorIndent(event.shiftKey ? -1 : 1)) {
+          event.preventDefault();
+          return true;
+        }
       }
       return false;
     }

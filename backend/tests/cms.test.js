@@ -71,6 +71,16 @@ describe('NoteFlow administrator access', () => {
     await agent.delete(`/api/cms/notes/${note.body.id}`).expect(200);
   });
 
+  it('keeps structured Markdown while omitting control markers from excerpts', async () => {
+    const agent = await editor();
+    const content = ':::indent 2\n缩进内容\n:::endindent\n\n:::toggle\n准备事项\n:::content\n- 第一项\n:::endtoggle';
+    const result = await agent.post('/api/cms/notes').send({ title: 'Structured', content }).expect(201);
+    expect(result.body.content).toBe(content);
+    expect(result.body.excerpt).toContain('缩进内容');
+    expect(result.body.excerpt).toContain('准备事项');
+    expect(result.body.excerpt).not.toContain(':::');
+  });
+
   it('persists pinned notes and returns them first in a filtered list', async () => {
     const agent = await editor();
     const older = await agent.post('/api/cms/notes').send({ title: 'Older', content: 'first' }).expect(201);

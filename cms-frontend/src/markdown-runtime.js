@@ -5,6 +5,7 @@ import {
   normalizeImageWidths,
   normalizeMarkdownStructure,
 } from './markdown-utils.js';
+import { extractStructuredBlocks } from './structured-markdown.js';
 
 const renderer = new marked.Renderer();
 const IMAGE_WIDTHS = new Set(['25', '33', '50', '66', '75', '100']);
@@ -81,7 +82,19 @@ const extractImageGrids = (source) => {
 const render = (source) => {
   const normalizedSource = normalizeMarkdownStructure(normalizeImageWidths(normalizeEscapedImageMarkdown(source)));
   const { markdown, grids } = extractImageGrids(normalizedSource);
-  let html = marked.parse(markdown);
+  const renderBlocks = (value) => {
+    const { markdown: extracted, blocks } = extractStructuredBlocks(value);
+    let html = marked.parse(extracted);
+    blocks.forEach((block) => {
+      const token = `<p>${block.token}</p>`;
+      const replacement = block.type === 'toggle'
+        ? `<details class="md-toggle"><summary>${marked.parseInline(block.summary)}</summary><div class="md-toggle__content">${renderBlocks(block.body)}</div></details>`
+        : `<div class="md-indent md-indent--${block.level}">${renderBlocks(block.body)}</div>`;
+      html = html.replace(token, replacement);
+    });
+    return html;
+  };
+  let html = renderBlocks(markdown);
   // marked emits a plain <ul> for GFM task lists; mark those lists so they
   // don't inherit ordinary-list bullets alongside the checkbox.
   html = html.replace(/<ul>(\s*<li><input\b)/g, '<ul class="contains-task-list">$1');

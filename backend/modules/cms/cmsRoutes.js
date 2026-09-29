@@ -44,6 +44,7 @@ const safeCategoryId = (label) => String(label || '')
 
 const markdownExcerpt = (content) => String(content || '')
   .replace(/```[\s\S]*?```/g, ' ')
+  .replace(/^:::(?:toggle|content|endtoggle|indent [1-4]|endindent)\s*$/gm, ' ')
   .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
   .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
   .replace(/^#{1,6}\s+/gm, '')

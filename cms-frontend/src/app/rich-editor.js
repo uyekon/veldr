@@ -7,7 +7,85 @@ import Placeholder from '@tiptap/extension-placeholder';
 import { TableKit } from '@tiptap/extension-table';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
+import Paragraph from '@tiptap/extension-paragraph';
 import { MAX_GALLERY_COLUMNS, MIN_GALLERY_COLUMNS, normalizeMarkdownForEditor } from '../markdown-utils.js';
+import { extractStructuredBlocks, indentLevel } from '../structured-markdown.js';
+
+const IndentedParagraph = Paragraph.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      indent: {
+        default: 0,
+        parseHTML: (element) => indentLevel(element.getAttribute('data-indent')),
+        renderHTML: (attributes) => indentLevel(attributes.indent)
+          ? { 'data-indent': indentLevel(attributes.indent) } : {},
+      },
+    };
+  },
+  renderMarkdown(node, helpers, context) {
+    const plain = Paragraph.config.renderMarkdown(node, helpers, context);
+    const level = indentLevel(node.attrs?.indent);
+    return level ? `:::indent ${level}\n${plain || '&nbsp;'}\n:::endindent` : plain;
+  },
+});
+
+const ToggleSummary = Node.create({
+  name: 'toggleSummary',
+  content: 'inline*',
+  defining: true,
+  parseHTML() { return [{ tag: '[data-veldr-toggle-summary]' }]; },
+  renderHTML() { return ['div', { 'data-veldr-toggle-summary': '', class: 'md-toggle__summary' }, 0]; },
+  renderMarkdown(node, helpers) { return helpers.renderChildren(node.content || [], ''); },
+});
+
+const ToggleContent = Node.create({
+  name: 'toggleContent',
+  content: 'block+',
+  defining: true,
+  parseHTML() { return [{ tag: '[data-veldr-toggle-content]' }]; },
+  renderHTML() { return ['div', { 'data-veldr-toggle-content': '', class: 'md-toggle__content' }, 0]; },
+  renderMarkdown(node, helpers) { return helpers.renderChildren(node.content || [], '\n\n'); },
+});
+
+const ToggleItem = Node.create({
+  name: 'toggleItem',
+  group: 'block',
+  content: 'toggleSummary toggleContent',
+  defining: true,
+  isolating: true,
+  parseHTML() { return [{ tag: '[data-veldr-toggle-item]' }]; },
+  renderHTML() { return ['div', { 'data-veldr-toggle-item': '', class: 'md-toggle' }, 0]; },
+  renderMarkdown(node, helpers) {
+    const summary = helpers.renderChildren(node.content?.[0]?.content || [], '');
+    const body = helpers.renderChildren(node.content?.[1]?.content || [], '\n\n');
+    return `:::toggle\n${summary}\n:::content\n${body}\n:::endtoggle\n\n`;
+  },
+  addNodeView() {
+    return () => {
+      const dom = document.createElement('div');
+      dom.className = 'md-toggle md-toggle--editor';
+      dom.setAttribute('data-veldr-toggle-item', '');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'md-toggle__button';
+      button.contentEditable = 'false';
+      button.setAttribute('aria-label', '折叠内容');
+      button.setAttribute('aria-expanded', 'true');
+      button.textContent = '▾';
+      const contentDOM = document.createElement('div');
+      contentDOM.className = 'md-toggle__editor-content';
+      dom.append(button, contentDOM);
+      button.addEventListener('click', () => {
+        const open = !dom.classList.toggle('md-toggle--closed');
+        button.setAttribute('aria-expanded', String(open));
+        button.setAttribute('aria-label', open ? '折叠内容' : '展开内容');
+        button.textContent = open ? '▾' : '▸';
+      });
+      return { dom, contentDOM, update: (node) => node.type.name === 'toggleItem' };
+    };
+  },
+});
 
 const imageAltText = (name) => String(name || 'image').replace(/[\[\]\n\r]/g, ' ').trim() || 'image';
 
@@ -130,11 +208,33 @@ export const parseLegacyMarkdown = (editor, markdown) => {
     videos.push({ src, poster });
     return `\n\n${token}\n\n`;
   });
-  const content = editor.markdown.parse(source);
-  const replaceTokens = (node) => {
+  const parseContent = (value) => {
+    const { markdown: extracted, blocks } = extractStructuredBlocks(value);
+    const content = editor.markdown.parse(extracted);
+    return replaceTokens(content, blocks);
+  };
+  const replaceTokens = (node, blocks) => {
     if (!node?.content) return node;
-    const children = node.content.map(replaceTokens);
+    const children = node.content.flatMap((child) => {
+      const replaced = replaceTokens(child, blocks);
+      return Array.isArray(replaced) ? replaced : [replaced];
+    });
     if (node.type === 'paragraph' && children.length === 1 && children[0]?.type === 'text') {
+      const structured = blocks.find((block) => block.token === children[0].text);
+      if (structured?.type === 'indent') {
+        const parsed = parseContent(structured.body).content || [];
+        return parsed.length ? parsed.map((item) => item.type === 'paragraph'
+          ? { ...item, attrs: { ...item.attrs, indent: structured.level } } : item)
+          : [{ type: 'paragraph', attrs: { indent: structured.level } }];
+      }
+      if (structured?.type === 'toggle') {
+        const summary = editor.markdown.parse(structured.summary).content?.[0]?.content || [];
+        const body = parseContent(structured.body).content || [];
+        return { type: 'toggleItem', content: [
+          { type: 'toggleSummary', content: summary },
+          { type: 'toggleContent', content: body.length ? body : [{ type: 'paragraph' }] },
+        ] };
+      }
       const match = String(children[0].text || '').match(/^VELDR_GALLERY_(\d+)_TOKEN$/);
       if (match) {
         const gallery = galleries[Number(match[1])];
@@ -148,7 +248,7 @@ export const parseLegacyMarkdown = (editor, markdown) => {
     }
     return { ...node, content: children };
   };
-  return replaceTokens(content);
+  return parseContent(source);
 };
 
 export const createRichEditor = (app, host) => {
@@ -159,8 +259,9 @@ export const createRichEditor = (app, host) => {
   return new Editor({
     element: host,
     extensions: [
-      StarterKit.configure({ link: { openOnClick: false } }),
+      StarterKit.configure({ link: { openOnClick: false }, paragraph: false }),
       Markdown.configure({ markedOptions: { gfm: true, breaks: true } }),
+      IndentedParagraph, ToggleItem, ToggleSummary, ToggleContent,
       VeldrImage, ImageGallery, VeldrVideo,
       Placeholder.configure({ placeholder: '在此编写笔记内容，支持 Markdown 快捷输入…' }),
       FileHandler.configure({

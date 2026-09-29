@@ -95,18 +95,29 @@ const render = (source) => {
     return html;
   };
   let html = renderBlocks(markdown);
-  // marked emits a plain <ul> for GFM task lists; mark those lists so they
-  // don't inherit ordinary-list bullets alongside the checkbox.
-  html = html.replace(/<ul>(\s*<li><input\b)/g, '<ul class="contains-task-list">$1');
-  html = html.replace(/<li><input\b/g, '<li class="task-list-item"><input');
   grids.forEach((grid, index) => {
     const token = `VELDR_IMAGE_GRID_${index}_TOKEN`;
     html = html.replace(new RegExp(`<p>\\s*${token}\\s*</p>`, 'g'), grid);
   });
-  return DOMPurify.sanitize(html, {
+  const safeHTML = DOMPurify.sanitize(html, {
     ADD_TAGS: ['video', 'source'],
     ADD_ATTR: ['target', 'rel', 'loading', 'controls', 'preload', 'poster', 'src', 'type'],
   });
+  const container = document.createElement('div');
+  container.innerHTML = safeHTML;
+  container.querySelectorAll('li').forEach((item) => {
+    const first = item.firstElementChild;
+    const checkbox = first?.matches('input[type="checkbox"]')
+      ? first : first?.matches('p') ? first.querySelector(':scope > input[type="checkbox"]') : null;
+    if (checkbox) item.classList.add('task-list-item');
+  });
+  container.querySelectorAll('ul').forEach((list) => {
+    const items = [...list.children].filter((child) => child.tagName === 'LI');
+    if (items.length && items.every((item) => item.classList.contains('task-list-item'))) {
+      list.classList.add('contains-task-list');
+    }
+  });
+  return container.innerHTML;
 };
 
 window.CMSMarkdown = {

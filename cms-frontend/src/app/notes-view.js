@@ -1,5 +1,84 @@
 // ===== 浏览视图：筛选、列表、详情、目录 =====
 export const notesViewMethods = {
+  browseViewKey() {
+    return JSON.stringify([this.currentNav, this.currentFilter, this.searchQuery, this.notesSort]);
+  },
+
+  readBrowseSession() {
+    try {
+      const data = JSON.parse(sessionStorage.getItem('veldr:browse-progress:v1') || '{}');
+      return data && typeof data === 'object' ? data : {};
+    } catch { return {}; }
+  },
+
+  writeBrowseSession(data) {
+    try { sessionStorage.setItem('veldr:browse-progress:v1', JSON.stringify(data)); } catch {}
+  },
+
+  saveBrowseProgress(selectedNoteId = null) {
+    const browse = document.getElementById('browseView');
+    const main = document.getElementById('mainContent');
+    if (!browse || !main || browse.style.display === 'none' || this.currentNote || this._browseRestoring || !this._renderedBrowseKey) return;
+    const key = this._renderedBrowseKey;
+    const cards = [...browse.querySelectorAll('.note-card')];
+    const top = main.getBoundingClientRect().top;
+    const anchor = cards.find(card => card.getBoundingClientRect().bottom > top + 1);
+    const data = this.readBrowseSession();
+    data.positions ||= {};
+    data.views ||= {};
+    data.positions[key] = {
+      scrollTop: main.scrollTop,
+      anchorId: anchor ? Number(anchor.dataset.id) : null,
+      offset: anchor ? anchor.getBoundingClientRect().top - top : 0,
+    };
+    data.views[this.currentNav] = {
+      filter: this.currentFilter,
+      search: this.searchQuery,
+      sort: this.notesSort,
+    };
+    if (selectedNoteId != null) data.lastDetail = { noteId: selectedNoteId, nav: this.currentNav };
+    this.writeBrowseSession(data);
+  },
+
+  restoreBrowseViewState(nav) {
+    const saved = this.readBrowseSession().views?.[nav];
+    if (!saved) return;
+    this.currentFilter = typeof saved.filter === 'string' ? saved.filter : 'all';
+    this.searchQuery = typeof saved.search === 'string' ? saved.search : '';
+    this.notesSort = ['updated', 'created', 'title', 'starred'].includes(saved.sort) ? saved.sort : 'updated';
+  },
+
+  restoreBrowseProgress(targetNoteId = null) {
+    const key = this.browseViewKey();
+    const saved = this.readBrowseSession().positions?.[key];
+    const token = this._browseRestoreToken = (this._browseRestoreToken || 0) + 1;
+    this._browseRestoring = true;
+    requestAnimationFrame(() => {
+      if (token !== this._browseRestoreToken) return;
+      const browse = document.getElementById('browseView');
+      const main = document.getElementById('mainContent');
+      if (!browse || !main || browse.style.display === 'none') {
+        this._browseRestoring = false;
+        return;
+      }
+      const target = targetNoteId != null
+        ? [...browse.querySelectorAll('.note-card')].find(card => Number(card.dataset.id) === targetNoteId)
+        : null;
+      const anchor = !target && saved?.anchorId != null
+        ? [...browse.querySelectorAll('.note-card')].find(card => Number(card.dataset.id) === saved.anchorId)
+        : null;
+      const card = target || anchor;
+      if (card) {
+        const wantedOffset = target ? 20 : (Number(saved.offset) || 0);
+        main.scrollTop += card.getBoundingClientRect().top - main.getBoundingClientRect().top - wantedOffset;
+      } else {
+        main.scrollTop = Number(saved?.scrollTop) || 0;
+      }
+      this._browseRestoring = false;
+      this.saveBrowseProgress();
+    });
+  },
+
   getNotebookScopeKey(notebookId) {
     if (!Array.isArray(notebookId) || notebookId.length === 0) return '';
     return [...new Set(notebookId.map((id) => String(id || '').trim()).filter(Boolean))].sort().join('|');
@@ -117,6 +196,7 @@ export const notesViewMethods = {
   },
 
   setFilter(filter, el) {
+    this.saveBrowseProgress();
     this.currentFilter = filter;
     this.searchQuery = '';
     document.getElementById('searchInput').value = '';
@@ -133,6 +213,8 @@ export const notesViewMethods = {
 
   showBrowse() {
     if (!this.confirmWhiteboardExit?.()) return;
+    const targetNoteId = this._browseReturnNoteId ?? this.currentNote?.id ?? null;
+    this._browseReturnNoteId = null;
     this.currentNote = null;
     document.getElementById('browseView').style.display = 'block';
     document.getElementById('detailView').classList.remove('detail-view--active');
@@ -140,7 +222,7 @@ export const notesViewMethods = {
     document.getElementById('whiteboardView').classList.remove('whiteboard-view--active');
     document.getElementById('tocNav').style.display = (window.innerWidth >= 1200) ? '' : 'none';
     this.renderBrowseToc();
-    this.renderNotes();
+    this.renderNotes(targetNoteId, true);
     this.syncHash();
   },
 
@@ -148,6 +230,7 @@ export const notesViewMethods = {
     if (!this.confirmWhiteboardExit?.()) return;
     const note = this._notes.find(n => n.id === id);
     if (!note) return;
+    this.saveBrowseProgress(id);
     this.currentNote = note;
     const isEditor = this.role === 'editor';
 
@@ -253,7 +336,8 @@ export const notesViewMethods = {
     });
   },
 
-  renderNotes() {
+  renderNotes(targetNoteId = null, skipCapture = false) {
+    if (!skipCapture && this._renderedBrowseKey === this.browseViewKey()) this.saveBrowseProgress();
     const notes = this.sortNotes(this.getFilteredNotes());
     const isEditor = this.role === 'editor';
     const grid = document.getElementById('browseView');
@@ -331,12 +415,15 @@ export const notesViewMethods = {
 
     html += '</div>';
     grid.innerHTML = html;
+    this._renderedBrowseKey = this.browseViewKey();
+    this.restoreBrowseProgress(targetNoteId);
   },
 
   // ===== 搜索 =====
   filter() {
     clearTimeout(this._searchTimer);
     this._searchTimer = setTimeout(() => {
+      this.saveBrowseProgress();
       this.searchQuery = document.getElementById('searchInput').value;
       this.renderNotes();
     }, 250);

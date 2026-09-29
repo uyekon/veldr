@@ -273,7 +273,11 @@ export const editorMethods = {
       this.updateCounts();
       this.renderTags();
       if (options.keepOpen || this.autosaveDirty) this.renderNotes();
-      else { this.closeModal({ force: true }); this.showBrowse(); }
+      else {
+        this._browseReturnNoteId = this.editingNoteId;
+        this.closeModal({ force: true });
+        this.showBrowse();
+      }
       this.toast(this.autosaveDirty ? '已保存提交内容，新增修改等待保存' : '笔记已保存');
     } catch (error) {
       if (error.code === 'VERSION_CONFLICT' || error.status === 409) return await this.handleVersionConflict(error.current);

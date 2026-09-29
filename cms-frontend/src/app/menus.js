@@ -5,13 +5,17 @@ import { PAGE_CONTENT } from '../page-content.js';
 export const menuMethods = {
   navTo(target) {
     if (!this.confirmEditorExit() || !this.confirmWhiteboardExit?.()) return;
+    this.saveBrowseProgress();
     this.currentNav = target;
     this.currentNote = null;
     this.currentFilter = 'all';
     this.searchQuery = '';
+    if (target === 'docs' || this._menus.some(menu => menu.id === target && menu.type === 'notebook')) {
+      this.restoreBrowseViewState(target);
+    }
     const searchInput = document.getElementById('searchInput');
-    if (searchInput) searchInput.value = '';
-    this.setSidebarActive('all');
+    if (searchInput) searchInput.value = this.searchQuery;
+    this.setSidebarActive(this.currentFilter);
 
     document.getElementById('browseView').style.display = 'none';
     document.getElementById('detailView').classList.remove('detail-view--active');

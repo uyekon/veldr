@@ -433,15 +433,15 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
 .markdown-preview th,.markdown-preview td{border:1px solid var(--c200);padding:8px 10px;text-align:left}
 .markdown-preview th{background:var(--c100);font-weight:600;color:var(--c900)}
 .markdown-preview input[type="checkbox"]{accent-color:var(--a600)}
-.markdown-preview ul.contains-task-list,.page-view ul.contains-task-list{list-style:none;padding-left:0}
-.markdown-preview li.task-list-item,.page-view li.task-list-item{list-style:none;display:flex;align-items:flex-start;gap:8px}
-.markdown-preview li.task-list-item input[type="checkbox"],.page-view li.task-list-item input[type="checkbox"]{margin-top:.35em;flex:0 0 auto}
+.markdown-preview ul.contains-task-list,.page-view ul.contains-task-list,.detail__content ul.contains-task-list{list-style:none;padding-left:0}
+.markdown-preview ul ul.contains-task-list,.page-view ul ul.contains-task-list,.detail__content ul ul.contains-task-list,
+.markdown-preview ul.contains-task-list ul,.page-view ul.contains-task-list ul,.detail__content ul.contains-task-list ul{padding-left:var(--s6)}
+.markdown-preview li.task-list-item,.page-view li.task-list-item,.detail__content li.task-list-item{list-style:none;display:list-item}
+.markdown-preview li.task-list-item input[type="checkbox"],.page-view li.task-list-item input[type="checkbox"],.detail__content li.task-list-item input[type="checkbox"]{margin-right:8px;vertical-align:baseline}
 .markdown-editor-host .tiptap ul[data-type="taskList"]{list-style:none;padding:0}
 .markdown-editor-host .tiptap ul[data-type="taskList"] > li{list-style:none;display:flex;align-items:flex-start;gap:8px}
 .markdown-editor-host .tiptap ul[data-type="taskList"] > li > label{flex:0 0 auto;margin-top:.2em}
-.detail__content ul.contains-task-list{list-style:none;padding-left:0}
-.detail__content li.task-list-item{list-style:none;display:flex;align-items:flex-start;gap:8px}
-.detail__content li.task-list-item input[type="checkbox"]{margin-top:.35em;flex:0 0 auto}
+.markdown-editor-host .tiptap ul[data-type="taskList"] ul[data-type="taskList"]{margin-left:var(--s6)}
 .markdown-preview a{color:var(--a700);text-decoration:none}
 .markdown-preview a:hover{text-decoration:underline}
 .detail__content p,.markdown-preview p{font-size:1rem;color:var(--c600);line-height:1.85;margin-bottom:var(--s4);white-space:pre-wrap}

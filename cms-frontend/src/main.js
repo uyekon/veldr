@@ -40,7 +40,18 @@ const boot = () => {
   installRouter(App);
   App.init();
 
+  const main = document.getElementById('mainContent');
+  let browseScrollFrame = null;
+  main?.addEventListener('scroll', () => {
+    if (browseScrollFrame != null) return;
+    browseScrollFrame = requestAnimationFrame(() => {
+      browseScrollFrame = null;
+      App.saveBrowseProgress();
+    });
+  }, { passive: true });
+
   window.addEventListener('beforeunload', (event) => {
+    App.saveBrowseProgress();
     if (!App.hasUnsavedEditorInput?.() && !App.hasUnsavedWhiteboardInput?.()) return;
     event.preventDefault();
     event.returnValue = '';

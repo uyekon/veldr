@@ -130,7 +130,11 @@ export function installDelegation(App) {
     App.scheduleAutosave();
   });
   document.addEventListener('change', (e) => {
-    if (e.target?.id === 'notesSort') { App.notesSort = e.target.value; App.renderNotes(); }
+    if (e.target?.id === 'notesSort') {
+      App.saveBrowseProgress();
+      App.notesSort = e.target.value;
+      App.renderNotes();
+    }
   });
   bind('imageInput', 'change', (e) => App.handleImageSelected(e));
   bind('videoInput', 'change', (e) => App.handleVideoSelected(e));

@@ -126,3 +126,54 @@ test('indent applies to every selected paragraph and previews both', async ({ pa
   await page.locator('[data-editor-mode="preview"]').click();
   await expect(page.locator('#markdownPreview .md-indent--1')).toHaveCount(2);
 });
+
+test('nested ordered, bullet and checkbox lists survive save and render vertically', async ({ page }) => {
+  let note = { id: 4, title: '嵌套列表', category: 'work', notebookId: 'nb1', tags: [], version: 1,
+    content: '1. 编号父项\n2. 编号子项\n\n- 符号父项\n- 符号子项\n\n- [ ] 任务父项\n- [ ] 任务子项' };
+  await page.route('**/api/**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    let body = {};
+    if (path === '/api/auth/me') body = { role: 'admin', username: 'test' };
+    else if (path.endsWith('/menus')) body = [{ id: 'docs', label: 'Docs', type: 'docs' }, { id: 'nb1', label: '本子', type: 'notebook' }];
+    else if (path.endsWith('/categories')) body = [{ id: 'work', label: '工作', notebookId: ['nb1'] }];
+    else if (path.endsWith('/notes')) body = [note];
+    else if (path.endsWith('/notes/4') && route.request().method() === 'PUT') {
+      note = { ...note, ...route.request().postDataJSON(), version: note.version + 1 };
+      body = note;
+    } else if (path.endsWith('/notes/4')) body = note;
+    await route.fulfill({ json: body });
+  });
+  await page.goto('/');
+  await page.waitForFunction(() => window.App?.role === 'editor' && window.App?._notes.length === 1);
+  await page.evaluate(() => window.App.openNoteModal(4));
+  const editor = page.locator('#noteContentHost .tiptap');
+  await editor.locator('ol > li').last().click();
+  await page.locator('[data-format="indent"]').click();
+  await expect(editor.locator('ol ol li')).toContainText('编号子项');
+  await editor.locator('ul:not([data-type]) > li').last().click();
+  await page.locator('[data-format="indent"]').click();
+  await expect(editor.locator('ul:not([data-type]) ul li')).toContainText('符号子项');
+  await editor.locator('ul[data-type="taskList"] > li').last().click();
+  await page.locator('[data-format="indent"]').click();
+  await expect(editor.locator('ul[data-type="taskList"] ul li')).toContainText('任务子项');
+  await page.locator('[data-editor-mode="preview"]').click();
+  await expect(page.locator('#markdownPreview ol ol li')).toContainText('编号子项');
+  await expect(page.locator('#markdownPreview ul:not(.contains-task-list) ul li').first()).toContainText('符号子项');
+  await expect(page.locator('#markdownPreview li.task-list-item li.task-list-item')).toContainText('任务子项');
+  await page.evaluate(() => window.App.saveNote({ keepOpen: true }));
+  await expect.poll(() => note.version).toBe(2);
+  await page.evaluate(() => window.App.closeModal({ force: true }));
+  await page.evaluate(() => window.App.showDetail(4));
+  await expect(page.locator('#detailView ol ol li')).toContainText('编号子项');
+  await expect(page.locator('#detailView li.task-list-item li.task-list-item')).toContainText('任务子项');
+  const taskLayout = await page.locator('#detailView li.task-list-item').first().evaluate((parent) => {
+    const child = parent?.querySelector('ul li.task-list-item');
+    return { parentTop: parent?.getBoundingClientRect().top, childTop: child?.getBoundingClientRect().top,
+      parentLeft: parent?.getBoundingClientRect().left, childLeft: child?.getBoundingClientRect().left };
+  });
+  expect(taskLayout.childTop).toBeGreaterThan(taskLayout.parentTop);
+  expect(taskLayout.childLeft).toBeGreaterThan(taskLayout.parentLeft);
+  await page.evaluate(() => window.App.openNoteModal(4));
+  await expect(page.locator('#noteContentHost ol ol li')).toContainText('编号子项');
+  await expect(page.locator('#noteContentHost ul[data-type="taskList"] ul li')).toContainText('任务子项');
+});

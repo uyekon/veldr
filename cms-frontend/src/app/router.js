@@ -44,15 +44,25 @@ export const routerMethods = {
       } else if ((match = hash.match(/^#\/note\/(\d+)$/))) {
         const id = Number(match[1]);
         if (this._notes.some(note => note.id === id)) {
+          const origin = this.readBrowseSession().lastDetail;
+          if (origin?.noteId === id && origin.nav !== this.currentNav &&
+              (origin.nav === 'docs' || this._menus.some(menu => menu.id === origin.nav && menu.type === 'notebook'))) {
+            this.navTo(origin.nav);
+          }
           this.showDetail(id);
         } else {
           this.navTo('docs');
         }
       } else if ((match = hash.match(/^#\/(?:nb|page)\/(.+)$/))) {
         const id = decodeURIComponent(match[1]);
-        this.navTo(this._menus.some(menu => menu.id === id) ? id : 'docs');
+        const target = this._menus.some(menu => menu.id === id) ? id : 'docs';
+        const returnId = this.currentNote?.id;
+        this.navTo(target);
+        if (returnId && this.readBrowseSession().lastDetail?.nav === target) this.restoreBrowseProgress(returnId);
       } else {
+        const returnId = this.currentNote?.id;
         this.navTo('docs');
+        if (returnId && this.readBrowseSession().lastDetail?.nav === 'docs') this.restoreBrowseProgress(returnId);
       }
     } finally {
       this._applyingRoute = false;

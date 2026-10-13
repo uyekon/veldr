@@ -17,6 +17,7 @@ import { uiMethods } from './app/ui.js';
 import { whiteboardMethods } from './app/whiteboard.js';
 import { routerMethods, installRouter } from './app/router.js';
 import { installDelegation } from './app/delegate.js';
+import { initPWA } from './pwa.js';
 
 Object.assign(
   App,
@@ -39,6 +40,8 @@ const boot = () => {
   installDelegation(App);
   installRouter(App);
   App.init();
+
+  initPWA();
 
   const main = document.getElementById('mainContent');
   let browseScrollFrame = null;

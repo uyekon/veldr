@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="NoteFlow">
+  <defs>
+    <linearGradient id="bg" x1="12" y1="8" x2="52" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22c55e"/>
+      <stop offset="1" stop-color="#15803d"/>
+    </linearGradient>
+    <linearGradient id="fold" x1="42" y1="10" x2="54" y2="24" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#dcfce7"/>
+      <stop offset="1" stop-color="#86efac"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="#f0fdf5"/>
+  <path d="M18 10h23l11 11v33H18z" fill="url(#bg)"/>
+  <path d="M41 10v12h11z" fill="url(#fold)"/>
+  <path d="M25 24v18h5V32l8 10h5V24h-5v10l-8-10z" fill="#fff"/>
+  <path d="M24 49h21" stroke="#bbf7d0" stroke-width="3" stroke-linecap="round"/>
+</svg>

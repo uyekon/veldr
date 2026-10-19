@@ -47,7 +47,8 @@ test('mobile header follows scroll direction and stays pinned for active control
 
   await scrollMain(page, 600);
   await expect(body).toHaveClass(/mobile-header--dimmed/);
-  await expect.poll(() => header.evaluate((element) => Number.parseFloat(getComputedStyle(element).opacity))).toBeCloseTo(.03, 2);
+  await expect.poll(() => header.evaluate((element) => Number.parseFloat(getComputedStyle(element).opacity))).toBe(0);
+  await expect(header).toBeHidden();
   await expect(await page.locator('.layout').evaluate((layout) => layout.getBoundingClientRect().top)).toBe(0);
   await expect(await page.evaluate(() => {
     const headerBottom = document.querySelector('.topnav').getBoundingClientRect().bottom;
@@ -59,6 +60,7 @@ test('mobile header follows scroll direction and stays pinned for active control
 
   await scrollMain(page, 560);
   await expect(body).not.toHaveClass(/mobile-header--dimmed/);
+  await expect(header).toBeVisible();
   await page.waitForTimeout(260);
   await expect(body).toHaveClass(/mobile-header--dimmed/);
 

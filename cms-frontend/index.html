@@ -51,7 +51,7 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
   border-bottom:1px solid var(--c200);z-index:100;
   display:flex;align-items:center;justify-content:space-between;
   padding:0 var(--s8);
-  transition:opacity .24s var(--ease);
+  transition:opacity .24s var(--ease),visibility .24s;
 }
 .topnav__brand{
   display:flex;align-items:center;gap:var(--s3);
@@ -568,7 +568,7 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
     grid-template-rows:42px 88px;gap:8px 10px;align-items:center;padding:8px var(--s4) 12px;
     will-change:opacity;
   }
-  body.mobile-header--dimmed .topnav{opacity:.03;pointer-events:none}
+  body.mobile-header--dimmed .topnav{opacity:0;visibility:hidden}
   .topnav__brand{min-width:0}
   .topnav__logo{width:28px;height:28px}
   .topnav__title{font-size:1rem}

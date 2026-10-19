@@ -39,6 +39,7 @@ window.App = App;
 const boot = () => {
   installDelegation(App);
   installRouter(App);
+  App.installMobileHeaderBehavior();
   App.init();
 
   initPWA();
@@ -50,6 +51,7 @@ const boot = () => {
     browseScrollFrame = requestAnimationFrame(() => {
       browseScrollFrame = null;
       App.saveBrowseProgress();
+      App.handleMobileContentScroll();
     });
   }, { passive: true });
 

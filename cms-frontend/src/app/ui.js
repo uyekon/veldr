@@ -24,7 +24,80 @@ export const uiMethods = {
     return window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
   },
 
+  isMobileHeaderPinned() {
+    if (!this.isMobile()) return false;
+    const topnav = document.querySelector('.topnav');
+    return Boolean(
+      topnav?.contains(document.activeElement)
+      || document.querySelector('.mobile-drawer--active, .topnav__profile-menu--open, .modal-overlay--active, .login-overlay--active'),
+    );
+  },
+
+  setMobileHeaderHidden(hidden) {
+    const main = document.getElementById('mainContent');
+    const shouldHide = Boolean(hidden) && this.isMobile() && !this.isMobileHeaderPinned() && (main?.scrollTop || 0) > 2;
+    document.body.classList.toggle('mobile-header--hidden', shouldHide);
+    this.mobileHeaderHidden = shouldHide;
+  },
+
+  showMobileHeader() {
+    clearTimeout(this.mobileHeaderIdleTimer);
+    this.setMobileHeaderHidden(false);
+  },
+
+  scheduleMobileHeaderIdleHide() {
+    clearTimeout(this.mobileHeaderIdleTimer);
+    if (!this.isMobile() || this.isMobileHeaderPinned() || (document.getElementById('mainContent')?.scrollTop || 0) <= 2) return;
+    this.mobileHeaderIdleTimer = setTimeout(() => this.setMobileHeaderHidden(true), 220);
+  },
+
+  handleMobileContentScroll() {
+    const main = document.getElementById('mainContent');
+    if (!main) return;
+    if (!this.isMobile()) {
+      this.showMobileHeader();
+      this.mobileHeaderLastScrollTop = 0;
+      return;
+    }
+    if (this.isMobileHeaderPinned()) {
+      this.showMobileHeader();
+      this.mobileHeaderLastScrollTop = main.scrollTop;
+      return;
+    }
+    const current = Math.max(0, main.scrollTop);
+    const previous = Number(this.mobileHeaderLastScrollTop ?? current);
+    const delta = current - previous;
+    this.mobileHeaderLastScrollTop = current;
+    if (current <= 2 || delta <= -8) this.showMobileHeader();
+    else if (delta >= 8) this.setMobileHeaderHidden(true);
+    this.scheduleMobileHeaderIdleHide();
+  },
+
+  refreshMobileHeader() {
+    if (!this.isMobile() || this.isMobileHeaderPinned() || (document.getElementById('mainContent')?.scrollTop || 0) <= 2) {
+      this.showMobileHeader();
+      return;
+    }
+    this.scheduleMobileHeaderIdleHide();
+  },
+
+  installMobileHeaderBehavior() {
+    const main = document.getElementById('mainContent');
+    this.mobileHeaderLastScrollTop = main?.scrollTop || 0;
+    document.addEventListener('focusin', () => this.refreshMobileHeader());
+    document.addEventListener('focusout', () => setTimeout(() => this.refreshMobileHeader(), 0));
+    const watched = ['mobileDrawer', 'profileMenu', 'noteModal', 'passwordModal', 'shortcutModal', 'draftRecoveryModal', 'diaryArchiveModal', 'loginOverlay'];
+    watched.forEach((id) => {
+      const element = document.getElementById(id);
+      if (!element) return;
+      new MutationObserver(() => this.refreshMobileHeader()).observe(element, { attributes: true, attributeFilter: ['class'] });
+    });
+    window.matchMedia?.('(max-width: 768px)').addEventListener?.('change', () => this.refreshMobileHeader());
+    this.refreshMobileHeader();
+  },
+
   setMobileSheetLock(on) {
+    this.showMobileHeader();
     if (this.isMobile()) window.scrollTo(0, 0);
     document.body.classList.toggle('mobile-sheet-open', Boolean(on));
     const overlay = document.getElementById('sidebarOverlay');
@@ -50,6 +123,7 @@ export const uiMethods = {
     drawer?.setAttribute('aria-hidden', 'true');
     document.getElementById('mobileMenuBtn')?.setAttribute('aria-expanded', 'false');
     this.setMobileSheetLock(false);
+    this.scheduleMobileHeaderIdleHide();
   },
 
   toggleMobileDrawerSection(sectionId) {

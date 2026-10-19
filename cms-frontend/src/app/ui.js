@@ -33,22 +33,22 @@ export const uiMethods = {
     );
   },
 
-  setMobileHeaderHidden(hidden) {
+  setMobileHeaderDimmed(dimmed) {
     const main = document.getElementById('mainContent');
-    const shouldHide = Boolean(hidden) && this.isMobile() && !this.isMobileHeaderPinned() && (main?.scrollTop || 0) > 2;
-    document.body.classList.toggle('mobile-header--hidden', shouldHide);
-    this.mobileHeaderHidden = shouldHide;
+    const shouldDim = Boolean(dimmed) && this.isMobile() && !this.isMobileHeaderPinned() && (main?.scrollTop || 0) > 2;
+    document.body.classList.toggle('mobile-header--dimmed', shouldDim);
+    this.mobileHeaderDimmed = shouldDim;
   },
 
   showMobileHeader() {
     clearTimeout(this.mobileHeaderIdleTimer);
-    this.setMobileHeaderHidden(false);
+    this.setMobileHeaderDimmed(false);
   },
 
-  scheduleMobileHeaderIdleHide() {
+  scheduleMobileHeaderIdleDim() {
     clearTimeout(this.mobileHeaderIdleTimer);
     if (!this.isMobile() || this.isMobileHeaderPinned() || (document.getElementById('mainContent')?.scrollTop || 0) <= 2) return;
-    this.mobileHeaderIdleTimer = setTimeout(() => this.setMobileHeaderHidden(true), 220);
+    this.mobileHeaderIdleTimer = setTimeout(() => this.setMobileHeaderDimmed(true), 220);
   },
 
   handleMobileContentScroll() {
@@ -69,8 +69,8 @@ export const uiMethods = {
     const delta = current - previous;
     this.mobileHeaderLastScrollTop = current;
     if (current <= 2 || delta <= -8) this.showMobileHeader();
-    else if (delta >= 8) this.setMobileHeaderHidden(true);
-    this.scheduleMobileHeaderIdleHide();
+    else if (delta >= 8) this.setMobileHeaderDimmed(true);
+    this.scheduleMobileHeaderIdleDim();
   },
 
   refreshMobileHeader() {
@@ -78,7 +78,7 @@ export const uiMethods = {
       this.showMobileHeader();
       return;
     }
-    this.scheduleMobileHeaderIdleHide();
+    this.scheduleMobileHeaderIdleDim();
   },
 
   installMobileHeaderBehavior() {
@@ -123,7 +123,7 @@ export const uiMethods = {
     drawer?.setAttribute('aria-hidden', 'true');
     document.getElementById('mobileMenuBtn')?.setAttribute('aria-expanded', 'false');
     this.setMobileSheetLock(false);
-    this.scheduleMobileHeaderIdleHide();
+    this.scheduleMobileHeaderIdleDim();
   },
 
   toggleMobileDrawerSection(sectionId) {

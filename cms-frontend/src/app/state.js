@@ -39,7 +39,7 @@ export const App = {
   role: null,            // 'viewer' | 'editor' | null
   _applyingRoute: false,
   _suppressHashHandler: false,
-  mobileHeaderHidden: false,
+  mobileHeaderDimmed: false,
   mobileHeaderLastScrollTop: 0,
   mobileHeaderIdleTimer: null,
 };

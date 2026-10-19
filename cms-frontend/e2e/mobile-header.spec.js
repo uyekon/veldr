@@ -40,35 +40,36 @@ test('mobile header follows scroll direction and stays pinned for active control
   const body = page.locator('body');
   if (testInfo.project.name !== 'mobile') {
     await scrollMain(page, 240);
-    await expect(body).not.toHaveClass(/mobile-header--hidden/);
+    await expect(body).not.toHaveClass(/mobile-header--dimmed/);
     await expect(header).toBeVisible();
     return;
   }
 
   await scrollMain(page, 240);
-  await expect(body).toHaveClass(/mobile-header--hidden/);
-  await expect.poll(() => page.locator('.layout').evaluate((layout) => layout.getBoundingClientRect().top)).toBe(0);
+  await expect(body).toHaveClass(/mobile-header--dimmed/);
+  await expect.poll(() => header.evaluate((element) => Number.parseFloat(getComputedStyle(element).opacity))).toBeCloseTo(.1, 2);
+  await expect(await page.locator('.layout').evaluate((layout) => layout.getBoundingClientRect().top)).toBe(158);
 
   await scrollMain(page, 200);
-  await expect(body).not.toHaveClass(/mobile-header--hidden/);
+  await expect(body).not.toHaveClass(/mobile-header--dimmed/);
   await page.waitForTimeout(260);
-  await expect(body).toHaveClass(/mobile-header--hidden/);
+  await expect(body).toHaveClass(/mobile-header--dimmed/);
 
   await scrollMain(page, 0);
-  await expect(body).not.toHaveClass(/mobile-header--hidden/);
+  await expect(body).not.toHaveClass(/mobile-header--dimmed/);
 
   await scrollMain(page, 240);
-  await expect(body).toHaveClass(/mobile-header--hidden/);
+  await expect(body).toHaveClass(/mobile-header--dimmed/);
   await page.locator('#searchInput').focus();
-  await expect(body).not.toHaveClass(/mobile-header--hidden/);
+  await expect(body).not.toHaveClass(/mobile-header--dimmed/);
 
   await page.locator('#searchInput').blur();
   await scrollMain(page, 240);
   await page.evaluate(() => window.App.openMobileDrawer());
   await expect(page.locator('#mobileDrawer')).toHaveClass(/mobile-drawer--active/);
-  await expect(body).not.toHaveClass(/mobile-header--hidden/);
+  await expect(body).not.toHaveClass(/mobile-header--dimmed/);
 
   await page.evaluate(() => window.App.openPasswordModal());
   await expect(page.locator('#passwordModal')).toHaveClass(/modal-overlay--active/);
-  await expect(body).not.toHaveClass(/mobile-header--hidden/);
+  await expect(body).not.toHaveClass(/mobile-header--dimmed/);
 });

@@ -568,7 +568,7 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
     grid-template-rows:42px 88px;gap:8px 10px;align-items:center;padding:8px var(--s4) 12px;
     will-change:opacity;
   }
-  body.mobile-header--dimmed .topnav{opacity:.03}
+  body.mobile-header--dimmed .topnav{opacity:.03;pointer-events:none}
   .topnav__brand{min-width:0}
   .topnav__logo{width:28px;height:28px}
   .topnav__title{font-size:1rem}
@@ -601,8 +601,8 @@ body{font-family:var(--font-sans);color:var(--c800);background:var(--c50);line-h
   .topnav__password{display:none!important}
   .sidebar{display:none}
   .sidebar--open{left:0}
-  .main{padding:var(--s6) var(--s4)}
-  .layout{margin-top:var(--topnav-h);height:calc(100vh - var(--topnav-h));height:calc(100dvh - var(--topnav-h))}
+  .main{padding:calc(var(--topnav-h) + var(--s6)) var(--s4) var(--s6)}
+  .layout{margin-top:0;height:100vh;height:100dvh}
   .notes-grid{grid-template-columns:1fr}
   .notes-grid{width:100%;min-width:0}
   .note-card{width:100%;min-width:0;box-sizing:border-box;padding:var(--s4);border-radius:10px}

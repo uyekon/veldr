@@ -47,7 +47,7 @@ test('mobile header follows scroll direction and stays pinned for active control
 
   await scrollMain(page, 240);
   await expect(body).toHaveClass(/mobile-header--dimmed/);
-  await expect.poll(() => header.evaluate((element) => Number.parseFloat(getComputedStyle(element).opacity))).toBeCloseTo(.1, 2);
+  await expect.poll(() => header.evaluate((element) => Number.parseFloat(getComputedStyle(element).opacity))).toBeCloseTo(.03, 2);
   await expect(await page.locator('.layout').evaluate((layout) => layout.getBoundingClientRect().top)).toBe(158);
 
   await scrollMain(page, 200);

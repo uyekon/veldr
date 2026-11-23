@@ -3,6 +3,7 @@
 // 由 Vite 打包（含 markdown-runtime），产物带 hash，无需手写 ?v= 版本号。
 // index.html 中的静态内联 onclick 仍通过 window.App 调用（下一步 CSP 改造再收敛）。
 // ============================================================
+import './styles.css';
 import './markdown-runtime.js';
 import './config.js';
 import { App } from './app/state.js';

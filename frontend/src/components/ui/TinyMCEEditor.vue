@@ -226,7 +226,7 @@ const editorConfig = {
   font_formats: 'Inter=Inter,Arial,sans-serif; Georgia=georgia,serif; Arial=arial,helvetica,sans-serif; Courier New=courier new,courier,monospace; Times New Roman=times new roman,times,serif; Verdana=verdana,geneva,sans-serif',
   toolbar_sticky: true,
   toolbar_mode: 'sliding',
-  plugins: 'advlist autolink lists link image charmap preview anchor searchreplace visualblocks code fullscreen insertdatetime media table help wordcount autoresize emoticons',
+  plugins: 'advlist autolink lists link image charmap preview anchor searchreplace visualblocks code fullscreen insertdatetime media table help wordcount emoticons',
   toolbar: 'undo redo | fontselect styleselect fontsizeselect | bold italic underline strikethrough | alignleft aligncenter alignright alignjustify | outdent indent | bullist numlist | link image media table | forecolor backcolor | removeformat | customUpload clearContent | code | help | fullscreen',
   automatic_uploads: true,
   file_picker_types: 'image',

@@ -197,7 +197,9 @@ test('markdown toolbar stays pinned while editing a long note', async ({ page })
   const modal = page.locator('#noteModal .modal');
   const toolbar = page.locator('#noteModal .modal__toolbar');
   const editor = page.locator('#noteContentHost .tiptap');
-  await editor.locator('p').last().scrollIntoViewIfNeeded();
+  await expect(editor.locator('p')).toHaveCount(90);
+  await expect(page.locator('#noteTitle')).toBeFocused();
+  await modal.evaluate((element) => { element.scrollTop = element.scrollHeight; });
   await expect.poll(() => modal.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   await expect(toolbar).toBeInViewport();
   const positions = await page.evaluate(() => ({

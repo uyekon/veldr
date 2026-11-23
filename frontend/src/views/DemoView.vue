@@ -405,7 +405,7 @@ onMounted(() => {
   }
 }
 
-.article-title {
+.demo-view .article-title {
   margin-bottom: 0.8rem;
 
   a {

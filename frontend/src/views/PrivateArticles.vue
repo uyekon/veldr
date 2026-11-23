@@ -252,7 +252,7 @@ onMounted(() => {
   }
 }
 
-.article-title {
+.private-articles .article-title {
   margin: 0 0 0.8rem;
 
   a {

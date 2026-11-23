@@ -195,6 +195,5 @@ defineExpose({
 <style lang="scss" scoped>
 .article-form {
   display: grid;
-  gap: 1rem;
 }
 </style>

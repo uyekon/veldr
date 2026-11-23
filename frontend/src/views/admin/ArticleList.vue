@@ -86,7 +86,7 @@
             </thead>
             <tbody>
               <tr v-for="article in filteredArticles" :key="article.id" :data-article-id="article.id">
-                <td>
+                <td class="note-cell">
                   <div class="article-info">
                     <div class="article-title">
                       <span class="fw-semibold">{{ article.title }}</span>
@@ -97,7 +97,7 @@
                     </div>
                   </div>
                 </td>
-                <td>
+                <td class="status-cell">
                   <button
                     :class="['badge', 'status-toggle', getStatusClass(article.status)]"
                     :disabled="isTogglingStatus === article.id"
@@ -109,7 +109,7 @@
                     {{ getStatusLabel(article.status) }}
                   </button>
                 </td>
-                <td>
+                <td class="date-cell">
                   <div class="date-info">
                     <div class="created-date">{{ formatDate(article.createdAt) }}</div>
                     <div class="text-muted small">
@@ -118,7 +118,7 @@
                     </div>
                   </div>
                 </td>
-                <td class="text-nowrap">
+                <td class="actions-cell text-nowrap">
                   <div class="action-buttons">
                     <router-link
                       v-if="article && article.id"
@@ -554,12 +554,18 @@ onMounted(() => {
 }
 
 .article-title {
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.3rem;
+  font-family: var(--font-family-sans);
+  font-size: 0.95rem;
+  line-height: 1.45;
 
   .fw-semibold {
     display: block;
     color: var(--color-heading);
+    font-family: inherit;
+    font-size: inherit;
     font-weight: 800;
+    line-height: inherit;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -722,6 +728,100 @@ onMounted(() => {
   .search-box,
   .filter-controls {
     width: 100%;
+  }
+}
+
+@media (max-width: 767px) {
+  .header-actions {
+    flex-wrap: wrap;
+  }
+
+  .filter-controls {
+    gap: 0.65rem;
+  }
+
+  .status-filter {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .table-responsive {
+    padding: 0.75rem;
+    overflow: visible;
+    background: var(--color-surface-muted);
+  }
+
+  .table {
+    display: block;
+    min-width: 0;
+
+    thead {
+      display: none;
+    }
+
+    tbody {
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    tbody tr {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 0.85rem;
+      padding: 1rem;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius-lg);
+      box-shadow: var(--shadow-card);
+    }
+
+    td {
+      width: auto;
+      padding: 0;
+      border: 0;
+    }
+
+    .note-cell,
+    .actions-cell {
+      grid-column: 1 / -1;
+    }
+
+    .date-cell {
+      text-align: right;
+    }
+
+    .actions-cell {
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--color-border);
+    }
+  }
+
+  .article-title .fw-semibold {
+    display: -webkit-box;
+    overflow: hidden;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .article-meta .excerpt {
+    display: -webkit-box;
+    overflow: hidden;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .created-date {
+    font-size: 0.85rem;
+  }
+
+  .date-info .small {
+    font-size: 0.75rem;
+  }
+
+  .action-buttons {
+    justify-content: flex-end;
   }
 }
 

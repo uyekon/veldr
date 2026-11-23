@@ -235,7 +235,7 @@ onMounted(() => {
   background: var(--color-accent);
 }
 
-.article-title {
+.article-view .article-title {
   margin: 0;
   color: var(--color-heading);
   font-family: Georgia, 'Times New Roman', serif;

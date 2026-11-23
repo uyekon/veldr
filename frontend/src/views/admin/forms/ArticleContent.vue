@@ -11,7 +11,7 @@
         :api-key="tinymceApiKey"
         :height="500"
         :placeholder="'Start writing your note...'"
-        :show-char-count="true"
+        :show-char-count="false"
         @change="onContentChange"
       />
       <div v-if="errors.content" class="invalid-feedback d-block">

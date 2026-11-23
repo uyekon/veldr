@@ -178,3 +178,35 @@ test('nested ordered, bullet and checkbox lists survive save and render vertical
   await expect(page.locator('#noteContentHost ol ol li')).toContainText('编号子项');
   await expect(page.locator('#noteContentHost ul[data-type="taskList"] ul li')).toContainText('任务子项');
 });
+
+test('markdown toolbar stays pinned while editing a long note', async ({ page }) => {
+  const note = { id: 5, title: '长文', category: 'work', notebookId: 'nb1', tags: [], version: 1,
+    content: Array.from({ length: 90 }, (_, index) => `第 ${index + 1} 段正文`).join('\n\n') };
+  await page.route('**/api/**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const body = path === '/api/auth/me' ? { role: 'admin', username: 'test' }
+      : path.endsWith('/menus') ? [{ id: 'docs', label: 'Docs', type: 'docs' }, { id: 'nb1', label: '本子', type: 'notebook' }]
+        : path.endsWith('/categories') ? [{ id: 'work', label: '工作', notebookId: ['nb1'] }]
+          : path.endsWith('/notes') ? [note] : {};
+    await route.fulfill({ json: body });
+  });
+  await page.goto('/');
+  await page.waitForFunction(() => window.App?.role === 'editor' && window.App?._notes.length === 1);
+  await page.evaluate(() => window.App.openNoteModal(5));
+
+  const modal = page.locator('#noteModal .modal');
+  const toolbar = page.locator('#noteModal .modal__toolbar');
+  const editor = page.locator('#noteContentHost .tiptap');
+  await editor.locator('p').last().scrollIntoViewIfNeeded();
+  await expect.poll(() => modal.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await expect(toolbar).toBeInViewport();
+  const positions = await page.evaluate(() => ({
+    modalTop: document.querySelector('#noteModal .modal').getBoundingClientRect().top,
+    toolbarTop: document.querySelector('#noteModal .modal__toolbar').getBoundingClientRect().top,
+  }));
+  expect(Math.abs(positions.toolbarTop - positions.modalTop)).toBeLessThanOrEqual(1);
+
+  await editor.locator('p').last().click();
+  await page.locator('[data-format="ol"]').click();
+  await expect(editor.locator('ol > li').last()).toContainText('第 90 段正文');
+});

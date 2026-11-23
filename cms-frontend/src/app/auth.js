@@ -1,4 +1,5 @@
 import { AUTH_API_BASE, apiPath } from '../config.js';
+import { clearApiCache } from './session-cache.js';
 
 const authPath = (path) => AUTH_API_BASE + path;
 
@@ -42,6 +43,7 @@ export const authMethods = {
     this.showLoading(true);
     try {
       const data = await this.auth(username, password);
+      await clearApiCache();
       this.role = 'editor';
       this.adminUsername = data.username || username;
       this.hideLogin();
@@ -74,6 +76,7 @@ export const authMethods = {
       return;
     }
     try { await this.api('POST', authPath('/logout')); } catch {}
+    await clearApiCache();
     this.enterViewerMode();
     this.toast('已退出编辑模式');
   },
@@ -221,6 +224,7 @@ export const authMethods = {
     this.showLoading(true);
     try {
       await this.api('PUT', authPath('/password'), { currentPassword, newPassword });
+      await clearApiCache();
       this.closePasswordModal();
       this.toast('密码已更新，其他设备需要重新登录');
     } catch (error) {

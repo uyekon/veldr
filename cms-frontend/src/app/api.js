@@ -1,4 +1,5 @@
 import { apiPath } from '../config.js';
+import { clearApiCache } from './session-cache.js';
 
 // ===== API 客户端 =====
 export const apiMethods = {
@@ -11,7 +12,8 @@ export const apiMethods = {
     this.toast('正在准备导出');
   },
   async api(method, url, body) {
-    const opts = { method, headers: {} };
+    // SW 仅用这个声明拆分离线缓存；服务端权限仍只认 HttpOnly 会话。
+    const opts = { method, headers: { 'X-NoteFlow-Role': this.role === 'editor' ? 'editor' : 'viewer' } };
     if (body !== undefined) {
       opts.headers['Content-Type'] = 'application/json';
       opts.body = JSON.stringify(body);
@@ -20,6 +22,7 @@ export const apiMethods = {
     const data = res.status === 204 ? null : await res.json().catch(() => null);
     if (!res.ok) {
       if (res.status === 401 && this.role === 'editor') {
+        await clearApiCache();
         this.role = 'viewer';
         this.applyRoleUI();
         this.showLogin();

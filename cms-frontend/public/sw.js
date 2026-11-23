@@ -10,23 +10,25 @@
  * 修改本文件后请同步 bump VERSION，否则旧缓存不会失效。
  */
 
-const VERSION = 'v1';
+const VERSION = 'v2';
 const STATIC_CACHE = `noteflow-static-${VERSION}`;
 const ASSET_CACHE = `noteflow-assets-${VERSION}`;
 const MEDIA_CACHE = `noteflow-media-${VERSION}`;
-const API_CACHE = `noteflow-api-${VERSION}`;
+const API_CACHE_VIEWER = `noteflow-api-viewer-${VERSION}`;
+const API_CACHE_EDITOR = `noteflow-api-editor-${VERSION}`;
+const API_CACHES = [API_CACHE_VIEWER, API_CACHE_EDITOR];
 const FONT_CACHE = `noteflow-fonts-${VERSION}`;
 
-// 是否缓存 /api GET 响应。
-// 开启后离线也能看到上次加载过的笔记；若同一域名会被多人以不同角色（viewer/editor）访问，
-// 请改为 false —— 否则 editor 视角的 private 笔记可能残留在缓存中被 viewer 命中。
+// CMS 只读接口按角色分缓存；认证与同步接口永不进入离线缓存。
+// X-NoteFlow-Role 只选择缓存分区，服务端权限仍由 HttpOnly 会话决定。
 const API_CACHE_ENABLED = true;
 
 // 缓存条目上限，防止无上限增长（笔记正文可能较大）
 const LIMITS = {
   [ASSET_CACHE]: 120,
   [MEDIA_CACHE]: 300,
-  [API_CACHE]: 60,
+  [API_CACHE_VIEWER]: 60,
+  [API_CACHE_EDITOR]: 60,
   [FONT_CACHE]: 40,
 };
 
@@ -42,6 +44,9 @@ const PRECACHE = [
 ];
 
 const isApi = (url) => url.pathname.includes('/api/');
+const isCacheableApi = (url) => url.pathname.includes('/api/cms/');
+const apiCacheFor = (request) => request.headers.get('x-noteflow-role') === 'editor'
+  ? API_CACHE_EDITOR : API_CACHE_VIEWER;
 const isUpload = (url) => url.pathname.includes('/uploads/');
 const isHashedAsset = (url) => url.pathname.includes('/assets/');
 const isFontHost = (url) =>
@@ -60,7 +65,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
-      const keep = new Set([STATIC_CACHE, ASSET_CACHE, MEDIA_CACHE, API_CACHE, FONT_CACHE]);
+      const keep = new Set([STATIC_CACHE, ASSET_CACHE, MEDIA_CACHE, ...API_CACHES, FONT_CACHE]);
       const names = await caches.keys();
       await Promise.all(names.filter((n) => !keep.has(n)).map((n) => caches.delete(n)));
       await self.clients.claim();
@@ -158,11 +163,13 @@ self.addEventListener('fetch', (event) => {
 
   if (url.origin !== self.location.origin) return; // 其他跨域请求放行
 
-  if (isApi(url)) {
+  if (isCacheableApi(url)) {
     if (!API_CACHE_ENABLED) return;
-    event.respondWith(networkFirst(request, API_CACHE));
+    event.respondWith(networkFirst(request, apiCacheFor(request)));
     return;
   }
+  // /api/auth/* 与 /api/v1/* 直接走网络，绝不缓存身份或同步响应。
+  if (isApi(url)) return;
 
   if (isUpload(url)) {
     event.respondWith(cacheFirst(request, MEDIA_CACHE));
@@ -184,6 +191,11 @@ self.addEventListener('message', (event) => {
     return;
   }
   if (event.data === 'CLEAR_API_CACHE') {
-    event.waitUntil(caches.delete(API_CACHE));
+    event.waitUntil((async () => {
+      const names = await caches.keys();
+      await Promise.all(names
+        .filter((name) => name.startsWith('noteflow-api-'))
+        .map((name) => caches.delete(name)));
+    })());
   }
 });

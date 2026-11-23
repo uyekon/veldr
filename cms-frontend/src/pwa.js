@@ -1,3 +1,5 @@
+import { clearApiCache } from './app/session-cache.js';
+
 // ============================================================
 // NoteFlow — PWA 注册
 // 仅在 HTTPS（或 localhost）且生产构建下注册 Service Worker。
@@ -21,9 +23,7 @@ const isEditing = () => {
   return (tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable) && !el.disabled;
 };
 
-export function clearApiCache() {
-  navigator.serviceWorker?.controller?.postMessage('CLEAR_API_CACHE');
-}
+export { clearApiCache };
 
 export function registerPWA() {
   if (!import.meta.env.PROD) return;
